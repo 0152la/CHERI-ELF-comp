@@ -11,6 +11,12 @@ add_executable(manager_args
 target_include_directories(manager_args PUBLIC ${INCLUDE_DIR} ${TOML_INCLUDE_DIR})
 target_link_libraries(manager_args PUBLIC chcomp)
 
+add_executable(perfing_wrapper
+    ${TEST_DIR}/perfing_wrapper.c
+    )
+target_include_directories(perfing_wrapper PUBLIC ${INCLUDE_DIR})
+target_link_libraries(perfing_wrapper PUBLIC chcomp)
+
 # Test properties
 define_property(TARGET
                 PROPERTY compartment

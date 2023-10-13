@@ -1,4 +1,5 @@
 #include "manager.h"
+#include "perfing.h"
 
 extern struct Compartment* loaded_comp;
 
@@ -27,8 +28,13 @@ main(int argc, char** argv)
     comp_map(hw_comp);
     int comp_result;
     size_t comp_args_count = 0;
+    record_time("PRE_EXEC_CALL");
     comp_result = comp_exec(hw_comp, "main", NULL, 0);
+    record_time("POST_EXEC_CALL");
     comp_clean(hw_comp);
     free(main_cep);
+
+    print_interval("PRE_EXEC_CALL", "POST_EXEC_CALL");
+
     return comp_result;
 }
