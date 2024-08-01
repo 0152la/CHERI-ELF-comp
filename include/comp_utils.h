@@ -3,6 +3,7 @@
 
 #include <err.h>
 #include <stddef.h>
+#include <stdint.h>
 #include <string.h>
 #include <sys/mman.h>
 
