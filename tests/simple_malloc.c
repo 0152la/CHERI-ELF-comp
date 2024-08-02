@@ -31,6 +31,16 @@ main(void)
     free(tmp02);
     free(tmp01);
 
+    // Check realloc
+    void* tmp11 = realloc(NULL, 2 * malloc_block_sz);
+    void* tmp13 = realloc(NULL, 1 * malloc_block_sz);
+    void* tmp12 = realloc(tmp11, 2 * malloc_block_sz);
+
+    assert(tmp11 == tmp12);
+
+    free(tmp12);
+    free(tmp13);
+
     // Check finding right block to insert
     void* tmp1 = malloc(1 * malloc_block_sz);
     void* y = malloc(3 * malloc_block_sz);

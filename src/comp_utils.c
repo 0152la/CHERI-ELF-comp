@@ -95,6 +95,7 @@ malloc(size_t to_alloc)
     */
     size_t to_alloc_total = to_alloc + block_metadata_sz;
 
+    // TODO replace with return NULL and check `mem_left` works
     if (to_alloc_total > mem_left)
     {
         errx(1, "comp_utils: Insufficient heap space left.");
@@ -157,6 +158,7 @@ free(void *to_free)
             void* free_block = get_next(curr_block);
             set_next(curr_block, get_next(free_block));
             clear_block(free_block);
+            mem_left += get_size(to_free) + block_metadata_sz;
             return;
         }
         curr_block = get_next(curr_block);
@@ -178,16 +180,20 @@ realloc(void *to_realloc, size_t new_size)
         return malloc(new_size);
     }
 
+    new_size += block_metadata_sz;
+
     if (new_size > get_size(to_realloc))
     {
         void* new_alloc = malloc(new_size);
-        memcpy(new_alloc, to_realloc, get_size(to_realloc));
+        memcpy(new_alloc, to_realloc, get_size(to_realloc) - block_metadata_sz);
         free(to_realloc);
+        mem_left -= new_size - get_size(to_realloc);
         return new_alloc;
     }
 
     memset((char*) to_realloc + new_size, 0, get_size(to_realloc) - new_size);
-    set_size(to_realloc, new_size + block_metadata_sz);
+    set_size(to_realloc, new_size);
+    mem_left += get_size(to_realloc) - new_size;
     return to_realloc;
 }
 
