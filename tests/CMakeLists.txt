@@ -5,7 +5,7 @@ add_executable(manager_call
     ${TEST_DIR}/manager_caller.c
     )
 target_include_directories(manager_call PUBLIC ${BIN_INCLUDE_DIRS})
-target_link_libraries(manager_call PUBLIC chcomp)
+target_link_libraries(manager_call PUBLIC chcomp compbench)
 
 add_executable(manager_call_multi
     ${TEST_DIR}/manager_caller_multiple.c
@@ -137,6 +137,7 @@ endfunction()
 set(func_binaries
     "test_map"
     "test_map_multi"
+    "test_bench"
     #"test_args_near_unmapped"
     #"test_two_comps"
     #"test_two_comps_inter_call"
@@ -213,6 +214,7 @@ set(tests
 
     "test_map"
     "test_map_multi"
+    "test_bench"
     #"test_args_near_unmapped"
     #"test_two_comps"
     #"test_two_comps_inter_call"
@@ -267,6 +269,8 @@ new_dependency(tls_check $<TARGET_FILE:tls_check-external2>)
 new_dependency(test_map $<TARGET_FILE:simple>)
 
 new_dependency(lua_script ${CMAKE_CURRENT_SOURCE_DIR}/hello_world.lua)
+
+target_link_libraries(test_bench PRIVATE compbench)
 #new_dependency(test_args_near_unmapped $<TARGET_FILE:args_simple>)
 #new_dependency(test_args_near_unmapped ${CMAKE_CURRENT_SOURCE_DIR}/args_simple.comp)
 

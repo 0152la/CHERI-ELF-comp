@@ -24,6 +24,8 @@
 #include "cheriintrin.h"
 #endif
 
+#include "benchmarking.h"
+
 // Morello `gcc` defines `ptraddr_t` in `stddef.h`, while `clang` does so in
 // `stdint.h`
 // TODO are there any other diverging definition files?
