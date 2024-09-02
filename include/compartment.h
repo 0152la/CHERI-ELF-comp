@@ -24,6 +24,8 @@
 #include "cheriintrin.h"
 #endif
 
+#include "benchmarking.h"
+
 // Morello `gcc` defines `ptraddr_t` in `stddef.h`, while `clang` does so in
 // `stdint.h`
 // TODO are there any other diverging definition files?
@@ -60,7 +62,6 @@ extern void *__capability comp_return_caps[2];
 // using `x` registers in `loading_params` in `transition.S`. This should be
 // the equivalent of checking for a 64-bit CHERI aware platform
 // TODO is there a better way to check?
-// TODO recheck if we need this
 #if !defined(CHERI_COMP_LINUX) && !(__LP64__ && defined(__CHERI__))
 #error Expecting 64-bit Arm Morello platform
 #endif

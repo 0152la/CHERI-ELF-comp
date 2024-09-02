@@ -3,9 +3,11 @@
 int
 main(int argc, char **argv)
 {
+    size_t all_bench = bench_init("all");
+    bench_start(all_bench);
     // Initial setup
     manager_ddc = cheri_ddc_get();
-    setup_intercepts();
+    BENCH(setup_intercepts(), "setup");
 
     assert(argc >= 2
         && "Expect at least one argument: binary file for compartment");
@@ -16,5 +18,8 @@ main(int argc, char **argv)
     int comp_result = mapping_exec(hw_map, "main", NULL);
     mapping_free(hw_map);
     comp_clean(hw_comp);
+
+    bench_end(all_bench);
+
     return comp_result;
 }
