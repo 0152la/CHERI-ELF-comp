@@ -21,6 +21,7 @@
 #include "symbols_comp.h"
 
 #include "cheriintrin.h"
+#include "benchmarking.h"
 
 // Morello `gcc` defines `ptraddr_t` in `stddef.h`, while `clang` does so in
 // `stdint.h`
