@@ -6,8 +6,13 @@ add_library(chcomp STATIC
     transition.S
     )
 target_include_directories(chcomp PRIVATE ${INCLUDE_DIR} ${TOML_INCLUDE_DIR})
-target_link_libraries(chcomp PRIVATE tomllib)
+target_link_libraries(chcomp PRIVATE tomllib compbench)
 
 add_library(computils SHARED
     comp_utils.c)
 target_include_directories(computils PRIVATE ${INCLUDE_DIR})
+
+add_library(compbench SHARED
+    benchmarking.c)
+target_include_directories(compbench PRIVATE ${INCLUDE_DIR})
+target_link_libraries(compbench PRIVATE m)
