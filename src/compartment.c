@@ -116,8 +116,9 @@ comp_from_elf(char *filename, struct CompConfig *cc)
 
     while (libs_parsed_count != libs_to_parse_count)
     {
-        struct LibDependency *parsed_lib
-            = parse_lib_file(libs_to_parse[libs_parsed_count], new_comp);
+        struct LibDependency *parsed_lib;
+        printf("---- %s\n", libs_to_parse[libs_parsed_count]);
+        BENCH(parsed_lib = parse_lib_file(libs_to_parse[libs_parsed_count], new_comp), "parsed_lib");
 
         // Get `tls_lookup_func` if we parsed `comp_utils.so`
         if (!strcmp(parsed_lib->lib_name, comp_utils_soname))
@@ -155,11 +156,11 @@ comp_from_elf(char *filename, struct CompConfig *cc)
     assert(cc->entry_points);
     assert(cc->entry_point_count > 0);
 
-    init_comp_scratch_mem(new_comp);
-    setup_environ(new_comp);
-    map_comp_entry_points(new_comp);
-    resolve_comp_tls_regions(new_comp);
-    resolve_rela_syms(new_comp);
+    BENCH(init_comp_scratch_mem(new_comp), "scratch");
+    BENCH(setup_environ(new_comp), "environ");
+    BENCH(map_comp_entry_points(new_comp), "entry_points");
+    BENCH(resolve_comp_tls_regions(new_comp), "TLS");
+    BENCH(resolve_rela_syms(new_comp), "rela_syms");
 
     // Compartment size sanity check
     assert(new_comp->mem_top
