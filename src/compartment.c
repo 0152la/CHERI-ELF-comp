@@ -944,6 +944,8 @@ resolve_rela_syms(struct Compartment *new_comp)
     struct LibRelaMapping *curr_rela_map;
     comp_symbol_list *candidate_syms;
     comp_symbol *chosen_sym;
+    cache_symbol *cached_sym;
+    cache_symbol_list *rela_cache = cache_syms_init();
     for (size_t i = 0; i < new_comp->libs_count; ++i)
     {
         for (size_t j = 0; j < new_comp->libs[i]->rela_maps_count; ++j)
@@ -981,9 +983,24 @@ resolve_rela_syms(struct Compartment *new_comp)
                 continue;
             }
 
-            candidate_syms = comp_syms_find_all(
-                curr_rela_map->rela_name, new_comp->comp_syms);
+            // First search the cache, if we already did a lookup for this
+            // symbol
+            cached_sym = cache_syms_search(curr_rela_map->rela_name, rela_cache);
+            if (cached_sym != NULL)
+            {
+                candidate_syms = cache_syms_get_candidates(cached_sym);
+            }
+            else
+            {
+                candidate_syms = comp_syms_init();
+                candidate_syms = comp_syms_find_all(
+                    curr_rela_map->rela_name, new_comp->comp_syms);
+                // Cache all found symbols
+                cache_syms_insert(curr_rela_map->rela_name, candidate_syms, rela_cache);
+            }
 
+            // If we did not find a defined candidate symbol, emit a warning if
+            // it's a weak bind symbol, or error otheriwise
             if (candidate_syms->data_count == 0)
             {
                 if (curr_rela_map->rela_sym_bind == STB_WEAK)
@@ -1012,7 +1029,6 @@ resolve_rela_syms(struct Compartment *new_comp)
                     curr_rela_map->rela_name, curr_rela_map->rela_sym_type, j,
                     new_comp->libs[i]->lib_name, i);
             }
-            // TODO caching
 
             // Prioritise looking for weak symbols in libraries outside the
             // source library, even if they are defined
@@ -1048,7 +1064,6 @@ resolve_rela_syms(struct Compartment *new_comp)
                 // TODO is there a better choice?
                 chosen_sym = candidate_syms->data[0];
             }
-            comp_syms_clean(candidate_syms);
 
             if (curr_rela_map->rela_sym_type == STT_TLS)
             {
@@ -1063,6 +1078,9 @@ resolve_rela_syms(struct Compartment *new_comp)
         }
         prev_tls_secs_size += new_comp->libs[i]->tls_sec_size;
     }
+
+    // This will clean the candidate lists as well
+    cache_syms_clean(rela_cache);
 }
 
 /*******************************************************************************

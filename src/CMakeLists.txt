@@ -5,6 +5,7 @@ add_library(chcomp STATIC
     manager.c
     symbols_comp.c
     symbols_lib.c
+    symbols_cache.c
     transition.S
     )
 target_include_directories(chcomp PRIVATE ${INCLUDE_DIR} ${TOML_INCLUDE_DIR})
