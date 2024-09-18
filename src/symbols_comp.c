@@ -1,4 +1,4 @@
-#include "symbols.h"
+#include "symbols_comp.h"
 
 /*******************************************************************************
  * Main functions
@@ -54,7 +54,7 @@ comp_syms_search(const char *to_find, const comp_symbol_list *list)
             return list->data[i];
         }
     }
-    errx(1, "Did not find symbol %s!\n", to_find);
+    return NULL;
 }
 
 comp_symbol_list *
