@@ -944,6 +944,8 @@ resolve_rela_syms(struct Compartment *new_comp)
     struct LibRelaMapping *curr_rela_map;
     comp_symbol_list *candidate_syms;
     comp_symbol *chosen_sym;
+    comp_symbol_list *relas_cache = comp_syms_init();
+    comp_symbol *cached_candidate;
     for (size_t i = 0; i < new_comp->libs_count; ++i)
     {
         for (size_t j = 0; j < new_comp->libs[i]->rela_maps_count; ++j)
@@ -981,70 +983,81 @@ resolve_rela_syms(struct Compartment *new_comp)
                 continue;
             }
 
-            candidate_syms = comp_syms_find_all(
-                curr_rela_map->rela_name, new_comp->comp_syms);
-
-            if (candidate_syms->data_count == 0)
+            cached_candidate = comp_syms_search(curr_rela_map->rela_name,
+                    relas_cache);
+            if (cached_candidate != NULL &&
+                    (curr_rela_map->rela_sym_bind != STB_WEAK ||
+                     cached_candidate->sym_lib_idx != i))
             {
-                if (curr_rela_map->rela_sym_bind == STB_WEAK)
-                {
-                    // TODO Hack to suppress weak `libc` relocations
-                    if (strcmp(new_comp->libs[i]->lib_name, "libc.so.7"))
-                    {
-                        warnx("Did not find WEAK symbol %s of type %hu (idx "
-                              "%zu in library %s (idx %zu)) - execution "
-                              "*might* fault.",
-                            curr_rela_map->rela_name,
-                            curr_rela_map->rela_sym_type, j,
-                            new_comp->libs[i]->lib_name, i);
-                    }
-                    continue;
-                }
-
-                errx(1,
-                    "Did not find symbol %s of type %hu (idx %zu in "
-                    "library %s "
-                    "(idx %zu))!",
-                    curr_rela_map->rela_name, curr_rela_map->rela_sym_type, j,
-                    new_comp->libs[i]->lib_name, i);
-            }
-            // TODO caching
-
-            // Prioritise looking for weak symbols in libraries outside the
-            // source library, even if they are defined
-            if (curr_rela_map->rela_sym_bind == STB_WEAK)
-            {
-                int fallback_sym_id = -1;
-                size_t k = 0;
-                for (; k < candidate_syms->data_count; ++k)
-                {
-                    if (!check_lib_dep_sym(candidate_syms->data[k]->sym_ref,
-                            curr_rela_map->rela_sym_type))
-                    {
-                        continue;
-                    }
-                    if (candidate_syms->data[k]->sym_lib_idx != i)
-                    {
-                        chosen_sym = candidate_syms->data[k];
-                        break;
-                    }
-                    else
-                    {
-                        fallback_sym_id = k;
-                    }
-                }
-                if (k == candidate_syms->data_count)
-                {
-                    assert(fallback_sym_id != -1);
-                    chosen_sym = candidate_syms->data[fallback_sym_id];
-                }
+                chosen_sym = cached_candidate;
             }
             else
             {
-                // TODO is there a better choice?
-                chosen_sym = candidate_syms->data[0];
+                candidate_syms = comp_syms_find_all(
+                    curr_rela_map->rela_name, new_comp->comp_syms);
+
+                if (candidate_syms->data_count == 0)
+                {
+                    if (curr_rela_map->rela_sym_bind == STB_WEAK)
+                    {
+                        // TODO Hack to suppress weak `libc` relocations
+                        if (strcmp(new_comp->libs[i]->lib_name, "libc.so.7"))
+                        {
+                            warnx("Did not find WEAK symbol %s of type %hu (idx "
+                                  "%zu in library %s (idx %zu)) - execution "
+                                  "*might* fault.",
+                                curr_rela_map->rela_name,
+                                curr_rela_map->rela_sym_type, j,
+                                new_comp->libs[i]->lib_name, i);
+                        }
+                        continue;
+                    }
+
+                    errx(1,
+                        "Did not find symbol %s of type %hu (idx %zu in "
+                        "library %s "
+                        "(idx %zu))!",
+                        curr_rela_map->rela_name, curr_rela_map->rela_sym_type, j,
+                        new_comp->libs[i]->lib_name, i);
+                }
+                // TODO caching
+
+                // Prioritise looking for weak symbols in libraries outside the
+                // source library, even if they are defined
+                if (curr_rela_map->rela_sym_bind == STB_WEAK)
+                {
+                    int fallback_sym_id = -1;
+                    size_t k = 0;
+                    for (; k < candidate_syms->data_count; ++k)
+                    {
+                        if (!check_lib_dep_sym(candidate_syms->data[k]->sym_ref,
+                                curr_rela_map->rela_sym_type))
+                        {
+                            continue;
+                        }
+                        if (candidate_syms->data[k]->sym_lib_idx != i)
+                        {
+                            chosen_sym = candidate_syms->data[k];
+                            break;
+                        }
+                        else
+                        {
+                            fallback_sym_id = k;
+                        }
+                    }
+                    if (k == candidate_syms->data_count)
+                    {
+                        assert(fallback_sym_id != -1);
+                        chosen_sym = candidate_syms->data[fallback_sym_id];
+                    }
+                }
+                else
+                {
+                    // TODO is there a better choice?
+                    chosen_sym = candidate_syms->data[0];
+                }
+                comp_syms_clean(candidate_syms);
             }
-            comp_syms_clean(candidate_syms);
 
             if (curr_rela_map->rela_sym_type == STT_TLS)
             {
@@ -1056,9 +1069,11 @@ resolve_rela_syms(struct Compartment *new_comp)
                 curr_rela_map->target_func_address
                     = eval_sym_offset(new_comp, chosen_sym);
             }
+            comp_syms_insert(chosen_sym, relas_cache) ;
         }
         prev_tls_secs_size += new_comp->libs[i]->tls_sec_size;
     }
+    comp_syms_clean(relas_cache);
 }
 
 /*******************************************************************************
