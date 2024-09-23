@@ -1,4 +1,4 @@
-#include "symbols.h"
+#include "symbols_lib.h"
 
 static void
 lib_syms_clean_one_entry(lib_symbol *sym)

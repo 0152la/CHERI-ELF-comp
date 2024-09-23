@@ -1,4 +1,4 @@
-#include "symbols.h"
+#include "symbols_comp.h"
 
 /*******************************************************************************
  * Main functions
