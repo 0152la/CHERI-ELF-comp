@@ -286,13 +286,6 @@ comp_map(struct Compartment *to_map)
     to_map->mapped = true;
 }
 
-void
-ddc_set(void *__capability cap)
-{
-    assert(cap != NULL);
-    asm volatile("MSR DDC, %[cap]" : : [cap] "C"(cap) : "memory");
-}
-
 /* Execute a mapped compartment, by jumping to the appropriate entry point.
  *
  * The entry point is given as a function name in the `fn_name` argument, and
