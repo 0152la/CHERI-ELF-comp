@@ -1,6 +1,6 @@
-# Manager executables
 set(BIN_INCLUDE_DIRS ${INCLUDE_DIR} ${TOML_INCLUDE_DIR} ${TOMMYDS_DIR})
 
+# Manager executables
 add_executable(manager_call
     ${TEST_DIR}/manager_caller.c
     )
@@ -12,6 +12,16 @@ add_executable(manager_args
     )
 target_include_directories(manager_args PUBLIC ${BIN_INCLUDE_DIRS})
 target_link_libraries(manager_args PUBLIC chcomp)
+
+# Special tests
+add_executable(comp_harness
+    ${SRC_DIR}/compartment.c
+    ${SRC_DIR}/symbols_comp.c
+    ${SRC_DIR}/symbols_lib.c
+    ${TEST_DIR}/compartment_harness.c
+)
+target_include_directories(comp_harness PUBLIC ${BIN_INCLUDE_DIRS})
+target_link_libraries(comp_harness PUBLIC tomllib tommydslib)
 
 # Test properties
 define_property(TARGET
