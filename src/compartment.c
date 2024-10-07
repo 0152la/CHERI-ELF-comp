@@ -110,8 +110,6 @@ comp_from_elf(char *filename, struct CompConfig *cc)
     char **libs_to_parse = malloc(sizeof(char *));
     libs_to_parse[0] = filename;
 
-    char *libs_folder = getenv(libs_path_env_var);
-
     while (libs_parsed_count != libs_to_parse_count)
     {
         struct LibDependency *parsed_lib
@@ -425,11 +423,20 @@ parse_lib_file(char *lib_name, struct Compartment *new_comp)
     {
         // Try to find the library in dependent paths
         // TODO currently only $COMP_LIBRARY_PATH
+        if (getenv(libs_path_env_var) == NULL)
+        {
+            errx(1, "Environment variable `%s` for library dependencies paths not set!", libs_path_env_var);
+        }
         lib_path = find_in_dir(lib_name, getenv(libs_path_env_var));
+        if (!lib_path)
+        {
+            errx(1, "Did not find file for lib `%s`!", lib_name);
+        }
         lib_fd = open(lib_path, O_RDONLY);
+        free(lib_path);
         if (lib_fd == -1)
         {
-            errx(1, "Error opening compartment file  %s!", lib_name);
+            err(1, "Error opening compartment file %s", lib_name);
         }
     }
 
@@ -1091,6 +1098,7 @@ check_lib_dep_sym(lib_symbol *sym, const unsigned short sym_type)
 static char *
 find_in_dir(const char *const lib_name, char *search_dir)
 {
+    char* res = NULL;
     assert(search_dir != NULL);
     char **search_paths = malloc(2 * sizeof(char *));
     search_paths[0] = search_dir;
@@ -1106,6 +1114,8 @@ find_in_dir(const char *const lib_name, char *search_dir)
     {
         if (!strcmp(lib_name, curr_entry->fts_name))
         {
+            res = malloc(curr_entry->fts_pathlen + 1);
+            strcpy(res, curr_entry->fts_path);
             break;
         }
     }
@@ -1113,7 +1123,7 @@ find_in_dir(const char *const lib_name, char *search_dir)
     free(search_paths);
     if (curr_entry != NULL)
     {
-        return curr_entry->fts_path;
+        return res;
     }
     return NULL;
 }
