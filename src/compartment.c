@@ -12,6 +12,9 @@ extern const unsigned short max_env_count;
  * Forward declarations
  ******************************************************************************/
 
+static struct Compartment* comp_init();
+static struct LibDependency* lib_init();
+
 static struct LibDependency *
 parse_lib_file(char *, struct Compartment *);
 static void
@@ -62,12 +65,12 @@ print_lib_dep(struct LibDependency *);
 /* Initialize some values of the Compartment struct. The rest are expected to
  * be set in `comp_from_elf`.
  */
+static
 struct Compartment *
 comp_init()
 {
     // TODO order
-    struct Compartment *new_comp
-        = (struct Compartment *) malloc(sizeof(struct Compartment));
+    struct Compartment *new_comp = malloc(sizeof(struct Compartment));
 
     new_comp->ddc = NULL;
 
@@ -92,6 +95,37 @@ comp_init()
     new_comp->page_size = sysconf(_SC_PAGESIZE);
 
     return new_comp;
+}
+
+static
+struct LibDependency*
+lib_init()
+{
+    struct LibDependency* new_lib = malloc(sizeof(struct LibDependency));
+
+    new_lib->lib_name = NULL;
+    new_lib->lib_path = NULL;
+    new_lib->lib_mem_base = 0x0;
+    new_lib->parsed_section_headers = 0;
+
+    new_lib->lib_segs_count = 0;
+    new_lib->lib_segs_size = 0;
+    new_lib->lib_segs = NULL;
+
+    new_lib->lib_syms = NULL;
+
+    new_lib->lib_dep_count = 0;
+    new_lib->lib_dep_names = NULL;
+
+    new_lib->rela_maps_count = 0;
+    new_lib->rela_maps = NULL;
+
+    new_lib->tls_sec_addr = 0x0;
+    new_lib->tls_sec_size = 0;
+    new_lib->tls_data_size = 0;
+    new_lib->tls_offset = 0;
+
+    return new_lib;
 }
 
 /* Give a binary ELF file in `filename`, read the ELF data and store it within
@@ -451,7 +485,7 @@ parse_lib_file(char *lib_name, struct Compartment *new_comp)
             lib_path);
     }
 
-    struct LibDependency *new_lib = malloc(sizeof(struct LibDependency));
+    struct LibDependency *new_lib = lib_init();
     new_lib->lib_name = malloc(strlen(lib_name) + 1);
     strcpy(new_lib->lib_name, lib_name);
     if (lib_path)
@@ -465,24 +499,6 @@ parse_lib_file(char *lib_name, struct Compartment *new_comp)
         strcpy(new_lib->lib_path, lib_name);
     }
 
-    // Initialization
-    new_lib->lib_mem_base = NULL;
-
-    new_lib->lib_segs_count = 0;
-    new_lib->lib_segs_size = 0;
-    new_lib->lib_segs = NULL;
-
-    new_lib->lib_syms = NULL;
-
-    new_lib->lib_dep_count = 0;
-    new_lib->lib_dep_names = NULL;
-
-    new_lib->rela_maps_count = 0;
-    new_lib->rela_maps = NULL;
-
-    new_lib->tls_sec_addr = 0x0;
-    new_lib->tls_sec_size = 0;
-    new_lib->tls_data_size = 0;
 
     parse_lib_segs(&lib_ehdr, lib_fd, new_lib, new_comp);
 
@@ -527,6 +543,7 @@ parse_lib_file(char *lib_name, struct Compartment *new_comp)
         if (curr_shdr.sh_type == SHT_SYMTAB)
         {
             parse_lib_symtb(&curr_shdr, &lib_ehdr, lib_fd, new_lib);
+            new_lib->parsed_section_headers |= COMP_SHT_SYMTAB_PARSED;
             found_headers += 1;
         }
         // Lookup `.rela.plt` to eagerly load relocatable function addresses
@@ -534,18 +551,21 @@ parse_lib_file(char *lib_name, struct Compartment *new_comp)
             && !strcmp(&shstrtab[curr_shdr.sh_name], ".rela.plt"))
         {
             parse_lib_rela(&curr_shdr, &lib_ehdr, lib_fd, new_lib);
+            new_lib->parsed_section_headers |= COMP_SHT_RELA_PLT_PARSED;
             found_headers += 1;
         }
         else if (curr_shdr.sh_type == SHT_RELA
             && !strcmp(&shstrtab[curr_shdr.sh_name], ".rela.dyn"))
         {
             parse_lib_rela(&curr_shdr, &lib_ehdr, lib_fd, new_lib);
+            new_lib->parsed_section_headers |= COMP_SHT_RELA_DYN_PARSED;
             found_headers += 1;
         }
         // Lookup `.dynamic` to find library dependencies
         else if (curr_shdr.sh_type == SHT_DYNAMIC)
         {
             parse_lib_dynamic_deps(&curr_shdr, &lib_ehdr, lib_fd, new_lib);
+            new_lib->parsed_section_headers |= COMP_SHT_DYNAMIC_PARSED;
             found_headers += 1;
         }
         // Section containing TLS static data
@@ -554,9 +574,15 @@ parse_lib_file(char *lib_name, struct Compartment *new_comp)
         {
             assert(new_lib->tls_sec_addr);
             new_lib->tls_data_size = curr_shdr.sh_size;
+            new_lib->parsed_section_headers |= COMP_SHF_TLS_PARSED;
         }
     }
-    assert(headers_of_interest_count == found_headers);
+    printf("PARSED_HEADS %s - %u\n", lib_name, new_lib->parsed_section_headers);
+    if (headers_of_interest_count != found_headers)
+    {
+        errx(1, "Lib `%s` - found %zu headers, expected %zu!",
+                new_lib->lib_name, found_headers, headers_of_interest_count);
+    }
 
     close(lib_fd);
     new_comp->libs_count += 1;

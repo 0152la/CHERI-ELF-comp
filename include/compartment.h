@@ -66,6 +66,13 @@ extern void *__capability comp_return_caps[2];
 #define DEFAULT_COMP_HEAP_SZ 0x800000UL // 800kB
 #define DEFAULT_COMP_STACK_SZ 0x80000UL // 80kB
 
+// Bits to check for required section headers
+const unsigned int COMP_SHT_SYMTAB_PARSED = 1 << 0;
+const unsigned int COMP_SHT_RELA_PLT_PARSED = 1 << 1;
+const unsigned int COMP_SHT_RELA_DYN_PARSED = 1 << 2;
+const unsigned int COMP_SHT_DYNAMIC_PARSED = 1 << 3;
+const unsigned int COMP_SHF_TLS_PARSED = 1 << 4;
+
 /* Struct representing one segment of an ELF binary.
  *
  * TODO expand */
@@ -104,6 +111,7 @@ struct LibDependency
     char *lib_name;
     char *lib_path;
     void *lib_mem_base;
+    unsigned int parsed_section_headers;
 
     // Segments of interest (usually, of type `PT_LOAD`) within this library
     size_t lib_segs_count;
@@ -211,8 +219,6 @@ struct Compartment
 
 int
 entry_point_cmp(const void *, const void *);
-struct Compartment *
-comp_init();
 struct Compartment *
 comp_from_elf(char *, struct CompConfig *); // char **, size_t, void *);
 void
