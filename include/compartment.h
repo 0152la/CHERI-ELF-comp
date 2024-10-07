@@ -20,7 +20,9 @@
 // TODO consider re-organizing
 #include "symbols_comp.h"
 
+#ifdef __CHERI__
 #include "cheriintrin.h"
+#endif
 
 // Morello `gcc` defines `ptraddr_t` in `stddef.h`, while `clang` does so in
 // `stdint.h`

@@ -1,6 +1,45 @@
 #define __capability
+#define ELF_ST_TYPE ELF64_ST_TYPE
+#define R_AARCH64_TLS_TPREL64 R_AARCH64_TLS_TPREL
 
-#include "compartment.h"
+#include <stdint.h>
+
+void*
+cheri_ddc_get()
+{
+    return 0x0;
+}
+
+int
+cheri_base_get(void* ddc)
+{
+    void* _ddc = ddc;
+    return 0;
+}
+
+void*
+cheri_address_get(void* ddc)
+{
+    void* _ddc = ddc;
+    return 0x0;
+}
+
+intptr_t
+cheri_length_get(void* ddc)
+{
+    return cheri_base_get(ddc);
+}
+
+intptr_t
+cheri_offset_get(void* ddc)
+{
+    return cheri_base_get(ddc);
+}
+
+#define CHERI_COMP_LINUX
+
+#include "../src/comp_utils.c"
+#include "../src/compartment.c"
 
 extern char** environ;
 char ** proc_env_ptr;
@@ -15,14 +54,24 @@ const size_t max_env_sz
 int64_t
 comp_exec_in(void * comp_sp, void *__capability comp_ddc, void * fn, void *args, size_t args_count, void *__capability src, void * tls)
 {
+    // Prevent `-Wno-unused-parameter` errors
+    void* _comp_sp = comp_sp;
+    void* __capability _comp_ddc = comp_ddc;
+    void* _args = args;
+    size_t _args_count = args_count;
+    void* __capability _src = src;
+    void* _tls = tls;
+
     return (int64_t) fn;
 }
 
 int
 main(int argc, char** argv)
 {
-    assert(argc == 2
-        && "Expect at least one argument: binary file for compartment");
+    if (argc < 2)
+    {
+        errx(1, "Expected at least one argument: binary file for compartment!");
+    }
     char *file = argv[1];
 
     proc_env_ptr = environ;

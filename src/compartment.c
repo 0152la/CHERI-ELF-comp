@@ -8,6 +8,13 @@ extern char **proc_env_ptr;
 extern const size_t max_env_sz;
 extern const unsigned short max_env_count;
 
+// Bits to check for required section headers
+const unsigned int COMP_SHT_SYMTAB_PARSED = 1 << 0;
+const unsigned int COMP_SHT_RELA_PLT_PARSED = 1 << 1;
+const unsigned int COMP_SHT_RELA_DYN_PARSED = 1 << 2;
+const unsigned int COMP_SHT_DYNAMIC_PARSED = 1 << 3;
+const unsigned int COMP_SHF_TLS_PARSED = 1 << 4;
+
 /*******************************************************************************
  * Forward declarations
  ******************************************************************************/
@@ -532,8 +539,6 @@ parse_lib_file(char *lib_name, struct Compartment *new_comp)
     // that this can be changed in future specifications.
     //
     // Source: https://refspecs.linuxfoundation.org/elf/elf.pdf
-    const size_t headers_of_interest_count = 4;
-    size_t found_headers = 0;
     Elf64_Shdr curr_shdr;
     for (size_t i = 0; i < lib_ehdr.e_shnum; ++i)
     {
@@ -544,7 +549,6 @@ parse_lib_file(char *lib_name, struct Compartment *new_comp)
         {
             parse_lib_symtb(&curr_shdr, &lib_ehdr, lib_fd, new_lib);
             new_lib->parsed_section_headers |= COMP_SHT_SYMTAB_PARSED;
-            found_headers += 1;
         }
         // Lookup `.rela.plt` to eagerly load relocatable function addresses
         else if (curr_shdr.sh_type == SHT_RELA
@@ -552,21 +556,18 @@ parse_lib_file(char *lib_name, struct Compartment *new_comp)
         {
             parse_lib_rela(&curr_shdr, &lib_ehdr, lib_fd, new_lib);
             new_lib->parsed_section_headers |= COMP_SHT_RELA_PLT_PARSED;
-            found_headers += 1;
         }
         else if (curr_shdr.sh_type == SHT_RELA
             && !strcmp(&shstrtab[curr_shdr.sh_name], ".rela.dyn"))
         {
             parse_lib_rela(&curr_shdr, &lib_ehdr, lib_fd, new_lib);
             new_lib->parsed_section_headers |= COMP_SHT_RELA_DYN_PARSED;
-            found_headers += 1;
         }
         // Lookup `.dynamic` to find library dependencies
         else if (curr_shdr.sh_type == SHT_DYNAMIC)
         {
             parse_lib_dynamic_deps(&curr_shdr, &lib_ehdr, lib_fd, new_lib);
             new_lib->parsed_section_headers |= COMP_SHT_DYNAMIC_PARSED;
-            found_headers += 1;
         }
         // Section containing TLS static data
         else if (curr_shdr.sh_type == SHT_PROGBITS
@@ -577,20 +578,17 @@ parse_lib_file(char *lib_name, struct Compartment *new_comp)
             new_lib->parsed_section_headers |= COMP_SHF_TLS_PARSED;
         }
     }
-    printf("PARSED_HEADS %s - %u\n", lib_name, new_lib->parsed_section_headers);
-    if (headers_of_interest_count != found_headers)
-    {
-        errx(1, "Lib `%s` - found %zu headers, expected %zu!",
-                new_lib->lib_name, found_headers, headers_of_interest_count);
-    }
 
     close(lib_fd);
     new_comp->libs_count += 1;
     new_comp->libs = realloc(
         new_comp->libs, new_comp->libs_count * sizeof(struct LibDependency *));
     new_comp->libs[new_comp->libs_count - 1] = new_lib;
-    update_comp_syms(
-        new_comp->comp_syms, new_lib->lib_syms, new_comp->libs_count - 1);
+    if (new_lib->lib_syms)
+    {
+        update_comp_syms(
+            new_comp->comp_syms, new_lib->lib_syms, new_comp->libs_count - 1);
+    }
 
     free(shstrtab);
 

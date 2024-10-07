@@ -8,7 +8,9 @@
 #include <string.h>
 #include <sys/mman.h>
 
+#ifdef __CHERI__
 #include "cheriintrin.h"
+#endif
 
 void *malloc(size_t);
 void
