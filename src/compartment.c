@@ -8,13 +8,6 @@ extern char **proc_env_ptr;
 extern const size_t max_env_sz;
 extern const unsigned short max_env_count;
 
-// Bits to check for required section headers
-const unsigned int COMP_SHT_SYMTAB_PARSED = 1 << 0;
-const unsigned int COMP_SHT_RELA_PLT_PARSED = 1 << 1;
-const unsigned int COMP_SHT_RELA_DYN_PARSED = 1 << 2;
-const unsigned int COMP_SHT_DYNAMIC_PARSED = 1 << 3;
-const unsigned int COMP_SHF_TLS_PARSED = 1 << 4;
-
 /*******************************************************************************
  * Forward declarations
  ******************************************************************************/
@@ -36,6 +29,9 @@ static void
 map_comp_entry_points(struct Compartment *);
 static void
 resolve_rela_syms(struct Compartment *);
+static void
+find_tls_lookup_func(struct Compartment*);
+
 static bool
 check_lib_dep_sym(lib_symbol *, const unsigned short);
 static void *
@@ -113,7 +109,6 @@ lib_init()
     new_lib->lib_name = NULL;
     new_lib->lib_path = NULL;
     new_lib->lib_mem_base = 0x0;
-    new_lib->parsed_section_headers = 0;
 
     new_lib->lib_segs_count = 0;
     new_lib->lib_segs_size = 0;
@@ -155,17 +150,6 @@ comp_from_elf(char *filename, struct CompConfig *cc)
     {
         struct LibDependency *parsed_lib
             = parse_lib_file(libs_to_parse[libs_parsed_count], new_comp);
-
-        // Get `tls_lookup_func` if we parsed `comp_utils.so`
-        if (!strcmp(parsed_lib->lib_name, comp_utils_soname))
-        {
-            new_comp->tls_lookup_func
-                = (char *) (lib_syms_search(
-                      tls_rtld_dropin, parsed_lib->lib_syms)
-                                ->sym_offset)
-                + (intptr_t) parsed_lib->lib_mem_base;
-            assert(new_comp->tls_lookup_func);
-        }
 
         const unsigned short libs_to_search_count = libs_to_parse_count;
         for (size_t i = 0; i < parsed_lib->lib_dep_count; ++i)
@@ -474,7 +458,6 @@ parse_lib_file(char *lib_name, struct Compartment *new_comp)
             errx(1, "Did not find file for lib `%s`!", lib_name);
         }
         lib_fd = open(lib_path, O_RDONLY);
-        free(lib_path);
         if (lib_fd == -1)
         {
             err(1, "Error opening compartment file %s", lib_name);
@@ -497,8 +480,7 @@ parse_lib_file(char *lib_name, struct Compartment *new_comp)
     strcpy(new_lib->lib_name, lib_name);
     if (lib_path)
     {
-        new_lib->lib_path = malloc(strlen(lib_path) + 1);
-        strcpy(new_lib->lib_path, lib_path);
+        new_lib->lib_path = lib_path;
     }
     else
     {
@@ -545,29 +527,26 @@ parse_lib_file(char *lib_name, struct Compartment *new_comp)
         do_pread(lib_fd, &curr_shdr, sizeof(Elf64_Shdr),
             lib_ehdr.e_shoff + i * sizeof(Elf64_Shdr));
 
-        if (curr_shdr.sh_type == SHT_SYMTAB)
+        if (curr_shdr.sh_type == SHT_SYMTAB ||
+                curr_shdr.sh_type == SHT_DYNSYM)
         {
             parse_lib_symtb(&curr_shdr, &lib_ehdr, lib_fd, new_lib);
-            new_lib->parsed_section_headers |= COMP_SHT_SYMTAB_PARSED;
         }
         // Lookup `.rela.plt` to eagerly load relocatable function addresses
         else if (curr_shdr.sh_type == SHT_RELA
             && !strcmp(&shstrtab[curr_shdr.sh_name], ".rela.plt"))
         {
             parse_lib_rela(&curr_shdr, &lib_ehdr, lib_fd, new_lib);
-            new_lib->parsed_section_headers |= COMP_SHT_RELA_PLT_PARSED;
         }
         else if (curr_shdr.sh_type == SHT_RELA
             && !strcmp(&shstrtab[curr_shdr.sh_name], ".rela.dyn"))
         {
             parse_lib_rela(&curr_shdr, &lib_ehdr, lib_fd, new_lib);
-            new_lib->parsed_section_headers |= COMP_SHT_RELA_DYN_PARSED;
         }
         // Lookup `.dynamic` to find library dependencies
         else if (curr_shdr.sh_type == SHT_DYNAMIC)
         {
             parse_lib_dynamic_deps(&curr_shdr, &lib_ehdr, lib_fd, new_lib);
-            new_lib->parsed_section_headers |= COMP_SHT_DYNAMIC_PARSED;
         }
         // Section containing TLS static data
         else if (curr_shdr.sh_type == SHT_PROGBITS
@@ -575,7 +554,6 @@ parse_lib_file(char *lib_name, struct Compartment *new_comp)
         {
             assert(new_lib->tls_sec_addr);
             new_lib->tls_data_size = curr_shdr.sh_size;
-            new_lib->parsed_section_headers |= COMP_SHF_TLS_PARSED;
         }
     }
 
@@ -586,8 +564,11 @@ parse_lib_file(char *lib_name, struct Compartment *new_comp)
     new_comp->libs[new_comp->libs_count - 1] = new_lib;
     if (new_lib->lib_syms)
     {
+        /*printf(" === LIB %s - %s\n", new_lib->lib_name, new_lib->lib_path);*/
+        /*lib_syms_print(new_lib->lib_syms);*/
         update_comp_syms(
             new_comp->comp_syms, new_lib->lib_syms, new_comp->libs_count - 1);
+        /*comp_syms_print(new_comp->comp_syms);*/
     }
 
     free(shstrtab);
@@ -672,8 +653,12 @@ parse_lib_symtb(Elf64_Shdr *symtb_shdr, Elf64_Ehdr *lib_ehdr, int lib_fd,
     size_t lib_syms_count = symtb_shdr->sh_size / sizeof(Elf64_Sym);
     size_t actual_syms = 0;
 
+    if (!lib_dep->lib_syms)
+    {
+        lib_dep->lib_syms = lib_syms_init();
+    }
+
     Elf64_Sym curr_sym;
-    lib_symbol_list *ld_syms = lib_syms_init();
     lib_symbol *to_insert;
     for (size_t j = 0; j < lib_syms_count; ++j)
     {
@@ -692,9 +677,8 @@ parse_lib_symtb(Elf64_Shdr *symtb_shdr, Elf64_Ehdr *lib_ehdr, int lib_fd,
         to_insert->sym_type = ELF64_ST_TYPE(curr_sym.st_info);
         to_insert->sym_bind = ELF64_ST_BIND(curr_sym.st_info);
         to_insert->sym_shndx = curr_sym.st_shndx;
-        lib_syms_insert(to_insert, ld_syms);
+        lib_syms_insert(to_insert, lib_dep->lib_syms);
     }
-    lib_dep->lib_syms = ld_syms;
 
     free(sym_tb);
     free(str_tb);
@@ -944,17 +928,22 @@ map_comp_entry_points(struct Compartment *new_comp)
 static void
 resolve_rela_syms(struct Compartment *new_comp)
 {
+    /*comp_syms_print(new_comp->comp_syms);*/
+
     // Find all symbols for eager relocation mapping
     size_t prev_tls_secs_size = 0;
     struct LibRelaMapping *curr_rela_map;
     comp_symbol **candidate_syms;
     comp_symbol *chosen_sym;
+    bool lel = true;
     for (size_t i = 0; i < new_comp->libs_count; ++i)
     {
+        lel = true;
         for (size_t j = 0; j < new_comp->libs[i]->rela_maps_count; ++j)
         {
             curr_rela_map = &new_comp->libs[i]->rela_maps[j];
             chosen_sym = NULL;
+
 
             // This is a TLS variable that exists in the current library; we
             // just allocate the space for it
@@ -987,8 +976,32 @@ resolve_rela_syms(struct Compartment *new_comp)
                 continue;
             }
 
-            candidate_syms = comp_syms_find_all(
+            /*if (curr_rela_map->rela_sym_type == STT_NOTYPE &&*/
+                    /*curr_rela_map->rela_sym_bind != STB_WEAK)*/
+            /*{*/
+                /*errx(1, "Unhandled `NOTYPE` non-`WEAK` symbol relocation: %s!", curr_rela_map->rela_name);*/
+            /*}*/
+
+            /*if (curr_rela_map->rela_sym_type == STT_NOTYPE)*/
+            /*{*/
+                /*warnx("Skipping `NOTYPE` symbol %s (idx %zu in library %s (idx %zu))",*/
+                    /*curr_rela_map->rela_name,*/
+                    /*j, new_comp->libs[i]->lib_name, i);*/
+                /*continue;*/
+            /*}*/
+
+            /*printf("CHECK %s\n", curr_rela_map->rela_name);*/
+            /*comp_symbol** css = comp_syms_find_all("setcontext", new_comp->comp_syms);*/
+            /*free(css);*/
+            /*printf("DONE %s\n", curr_rela_map->rela_name);*/
+
+                candidate_syms = comp_syms_find_all(
                 curr_rela_map->rela_name, new_comp->comp_syms);
+
+            /*printf("CHECK 2 %s\n", curr_rela_map->rela_name);*/
+            /*css = comp_syms_find_all("setcontext", new_comp->comp_syms);*/
+            /*free(css);*/
+            /*printf("DONE 2 %s\n", curr_rela_map->rela_name);*/
 
             if (*candidate_syms == NULL)
             {
@@ -1024,22 +1037,23 @@ resolve_rela_syms(struct Compartment *new_comp)
             if (curr_rela_map->rela_sym_bind == STB_WEAK)
             {
                 comp_symbol *fallback_sym = NULL;
-                while (*candidate_syms)
+                comp_symbol** candidate_syms_iter = candidate_syms;
+                while (*candidate_syms_iter)
                 {
-                    if (check_lib_dep_sym((*candidate_syms)->sym_ref,
+                    if (check_lib_dep_sym((*candidate_syms_iter)->sym_ref,
                             curr_rela_map->rela_sym_type))
                     {
-                        if ((*candidate_syms)->sym_lib_idx != i)
+                        if ((*candidate_syms_iter)->sym_lib_idx != i)
                         {
-                            chosen_sym = *candidate_syms;
+                            chosen_sym = *candidate_syms_iter;
                             break;
                         }
                         else if (!fallback_sym)
                         {
-                            fallback_sym = *candidate_syms;
+                            fallback_sym = *candidate_syms_iter;
                         }
                     }
-                    candidate_syms += 1;
+                    candidate_syms_iter += 1;
                 }
                 if (!chosen_sym)
                 {
@@ -1067,6 +1081,19 @@ resolve_rela_syms(struct Compartment *new_comp)
             }
         }
         prev_tls_secs_size += new_comp->libs[i]->tls_sec_size;
+    }
+}
+
+/* Search existing compartment symbols to see if we defined a
+ * `tls_lookup_func`
+ */
+void
+find_tls_lookup_func(struct Compartment* comp)
+{
+    comp_symbol* tls_lf = comp_syms_search(tls_rtld_dropin, comp->comp_syms);
+    if (tls_lf)
+    {
+        comp->tls_lookup_func = eval_sym_offset(comp, tls_lf);
     }
 }
 
@@ -1107,16 +1134,17 @@ eval_sym_tls_offset(struct Compartment *comp, const comp_symbol *sym)
         + comp->libs[sym->sym_lib_idx]->tls_offset;
 }
 
+// TODO relocate all `NOTYPE` symbols to same symbol - cache?
 static bool
-check_lib_dep_sym(lib_symbol *sym, const unsigned short sym_type)
+check_lib_dep_sym(lib_symbol *sym, const unsigned short rela_type)
 {
     return
         // Ignore `LOCAL` bind symbols - they cannot be relocated against
         sym->sym_bind != STB_LOCAL &&
         // Check symbol is indeed local, not another external reference
         sym->sym_shndx != 0 &&
-        // Check symbol type matches
-        sym->sym_type == sym_type;
+        // Check symbol type matches, or relocation is `NOTYPE`
+        (rela_type == STT_NOTYPE || sym->sym_type == rela_type);
 }
 
 static char *
@@ -1231,6 +1259,8 @@ resolve_comp_tls_regions(struct Compartment *new_comp)
     {
         return;
     }
+
+    find_tls_lookup_func(new_comp);
     assert(new_comp->tls_lookup_func);
 
     // TODO currently we only support one thread

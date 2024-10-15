@@ -60,20 +60,14 @@ extern void *__capability comp_return_caps[2];
 // using `x` registers in `loading_params` in `transition.S`. This should be
 // the equivalent of checking for a 64-bit CHERI aware platform
 // TODO is there a better way to check?
-#if !(__LP64__ && defined(__CHERI__))
+// TODO recheck if we need this
+#if !defined(CHERI_COMP_LINUX) && !(__LP64__ && defined(__CHERI__))
 #error Expecting 64-bit Arm Morello platform
 #endif
 
 // Default sizes for compartment heap and stack, if not explicitly given
 #define DEFAULT_COMP_HEAP_SZ 0x800000UL // 800kB
 #define DEFAULT_COMP_STACK_SZ 0x80000UL // 80kB
-
-// Bits to check for required section headers
-const unsigned int COMP_SHT_SYMTAB_PARSED = 1 << 0;
-const unsigned int COMP_SHT_RELA_PLT_PARSED = 1 << 1;
-const unsigned int COMP_SHT_RELA_DYN_PARSED = 1 << 2;
-const unsigned int COMP_SHT_DYNAMIC_PARSED = 1 << 3;
-const unsigned int COMP_SHF_TLS_PARSED = 1 << 4;
 
 /* Struct representing one segment of an ELF binary.
  *
@@ -113,7 +107,6 @@ struct LibDependency
     char *lib_name;
     char *lib_path;
     void *lib_mem_base;
-    unsigned int parsed_section_headers;
 
     // Segments of interest (usually, of type `PT_LOAD`) within this library
     size_t lib_segs_count;

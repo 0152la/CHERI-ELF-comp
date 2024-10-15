@@ -1,44 +1,12 @@
-#define __capability
 #define ELF_ST_TYPE ELF64_ST_TYPE
 #define R_AARCH64_TLS_TPREL64 R_AARCH64_TLS_TPREL
 
+#define __capability
+
 #include <stdint.h>
-
-void*
-cheri_ddc_get()
-{
-    return 0x0;
-}
-
-int
-cheri_base_get(void* ddc)
-{
-    void* _ddc = ddc;
-    return 0;
-}
-
-void*
-cheri_address_get(void* ddc)
-{
-    void* _ddc = ddc;
-    return 0x0;
-}
-
-intptr_t
-cheri_length_get(void* ddc)
-{
-    return cheri_base_get(ddc);
-}
-
-intptr_t
-cheri_offset_get(void* ddc)
-{
-    return cheri_base_get(ddc);
-}
 
 #define CHERI_COMP_LINUX
 
-#include "../src/comp_utils.c"
 #include "../src/compartment.c"
 
 extern char** environ;

@@ -14,14 +14,18 @@ target_include_directories(manager_args PUBLIC ${BIN_INCLUDE_DIRS})
 target_link_libraries(manager_args PUBLIC chcomp)
 
 # Special tests
-add_executable(comp_harness
-    ${SRC_DIR}/compartment.c
+add_executable(comp_harness EXCLUDE_FROM_ALL
     ${SRC_DIR}/symbols_comp.c
     ${SRC_DIR}/symbols_lib.c
     ${TEST_DIR}/compartment_harness.c
 )
 target_include_directories(comp_harness PUBLIC ${BIN_INCLUDE_DIRS})
 target_link_libraries(comp_harness PUBLIC tomllib tommydslib)
+
+add_executable(so_harness
+    ${TEST_DIR}/so_harness.c
+)
+target_link_libraries(so_harness PUBLIC dl)
 
 # Test properties
 define_property(TARGET
@@ -69,7 +73,7 @@ function(new_comp_test test_name)
     add_library(${test_name} SHARED
         ${test_name}.c)
     set_target_properties(${test_name} PROPERTIES PREFIX "")
-    target_link_libraries(${test_name} PRIVATE chcomp computils lualib dl m)
+    target_link_libraries(${test_name} PRIVATE computils lualib dl m)
     target_include_directories(${test_name} PRIVATE ${INCLUDE_DIR} ${LUA_INCLUDE_DIR})
 
     set_property(TARGET ${test_name} PROPERTY compartment TRUE)
@@ -123,7 +127,6 @@ endfunction()
 
 # Library tests
 set(func_binaries
-    "so_harness"
     "test_map"
     #"test_args_near_unmapped"
     #"test_two_comps"
