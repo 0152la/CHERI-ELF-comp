@@ -55,7 +55,8 @@ main(int argc, char** argv)
     mock_cc->stack_size = 0x80000UL;
     mock_cc->entry_points = mock_cep;
     mock_cc->entry_point_count = 1;
-    mock_cc->base_address = malloc(sizeof(char));
+    /*mock_cc->base_address = malloc(sizeof(char));*/
+    mock_cc->base_address = (void*) 0x1000000UL;
 
     struct Compartment *hw_comp = comp_from_elf(file, mock_cc);
 

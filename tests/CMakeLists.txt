@@ -21,6 +21,8 @@ add_executable(comp_harness EXCLUDE_FROM_ALL
 )
 target_include_directories(comp_harness PUBLIC ${BIN_INCLUDE_DIRS})
 target_link_libraries(comp_harness PUBLIC tomllib tommydslib)
+target_compile_options(comp_harness BEFORE PUBLIC -fsanitize=address)
+target_link_options(comp_harness BEFORE PUBLIC -fsanitize=address)
 
 add_executable(so_harness
     ${TEST_DIR}/so_harness.c

@@ -67,10 +67,6 @@ comp_syms_insert(comp_symbol *to_insert, comp_symbol_list *list)
 {
     tommy_hashtable_insert(list, &to_insert->node, to_insert,
         hashtable_hash(to_insert->sym_ref->sym_name));
-    if (!strcmp(to_insert->sym_ref->sym_name, "setcontext"))
-    {
-        printf("INSERTED COMPSYM %p NODE %p REF %p\n", (void*) to_insert, (void*) &to_insert->node, (void*) to_insert->sym_ref);
-    }
 }
 
 comp_symbol *
@@ -85,31 +81,25 @@ comp_symbol **
 comp_syms_find_all(const char *to_find, comp_symbol_list *list)
 {
     comp_symbol **res = calloc(MAX_FIND_ALL_COUNT, sizeof(comp_symbol *));
-    assert(res);
+    if (!res)
+    {
+        err(1, "Error allocating temporary memory for compartment symbol lookup!");
+    }
     unsigned int res_sz = 0;
     tommy_hashtable_node *curr_node
         = tommy_hashtable_bucket(list, hashtable_hash(to_find));
-    /*printf("SEARCH %s\n", to_find);*/
     while (curr_node)
     {
-        if (!strcmp(to_find, "setcontext"))
-        {
-            /*printf("PARSE %p\n", curr_node->data);*/
-            /*printf("\t >> NODE %p\n", (void*) curr_node);*/
-            /*printf("\t >> NAME %s\n", ((comp_symbol*) curr_node->data)->sym_ref->sym_name);*/
-        }
         if (!strcmp(
                 ((comp_symbol *) curr_node->data)->sym_ref->sym_name, to_find))
         {
             res[res_sz] = (comp_symbol *) curr_node->data;
-            /*printf("FOUND IDX %zu ADDR %p\n", res[res_sz]->sym_lib_idx, (void*) res[res_sz]->sym_ref);*/
             res_sz += 1;
         }
         curr_node = curr_node->next;
     }
     assert(res_sz < MAX_FIND_ALL_COUNT - 1);
     res = realloc(res, (res_sz + 1) * sizeof(comp_symbol *));
-    assert(res);
     return res;
 }
 

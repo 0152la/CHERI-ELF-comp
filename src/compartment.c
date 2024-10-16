@@ -564,11 +564,8 @@ parse_lib_file(char *lib_name, struct Compartment *new_comp)
     new_comp->libs[new_comp->libs_count - 1] = new_lib;
     if (new_lib->lib_syms)
     {
-        /*printf(" === LIB %s - %s\n", new_lib->lib_name, new_lib->lib_path);*/
-        /*lib_syms_print(new_lib->lib_syms);*/
         update_comp_syms(
             new_comp->comp_syms, new_lib->lib_syms, new_comp->libs_count - 1);
-        /*comp_syms_print(new_comp->comp_syms);*/
     }
 
     free(shstrtab);
@@ -928,8 +925,6 @@ map_comp_entry_points(struct Compartment *new_comp)
 static void
 resolve_rela_syms(struct Compartment *new_comp)
 {
-    /*comp_syms_print(new_comp->comp_syms);*/
-
     // Find all symbols for eager relocation mapping
     size_t prev_tls_secs_size = 0;
     struct LibRelaMapping *curr_rela_map;
@@ -976,32 +971,8 @@ resolve_rela_syms(struct Compartment *new_comp)
                 continue;
             }
 
-            /*if (curr_rela_map->rela_sym_type == STT_NOTYPE &&*/
-                    /*curr_rela_map->rela_sym_bind != STB_WEAK)*/
-            /*{*/
-                /*errx(1, "Unhandled `NOTYPE` non-`WEAK` symbol relocation: %s!", curr_rela_map->rela_name);*/
-            /*}*/
-
-            /*if (curr_rela_map->rela_sym_type == STT_NOTYPE)*/
-            /*{*/
-                /*warnx("Skipping `NOTYPE` symbol %s (idx %zu in library %s (idx %zu))",*/
-                    /*curr_rela_map->rela_name,*/
-                    /*j, new_comp->libs[i]->lib_name, i);*/
-                /*continue;*/
-            /*}*/
-
-            /*printf("CHECK %s\n", curr_rela_map->rela_name);*/
-            /*comp_symbol** css = comp_syms_find_all("setcontext", new_comp->comp_syms);*/
-            /*free(css);*/
-            /*printf("DONE %s\n", curr_rela_map->rela_name);*/
-
-                candidate_syms = comp_syms_find_all(
-                curr_rela_map->rela_name, new_comp->comp_syms);
-
-            /*printf("CHECK 2 %s\n", curr_rela_map->rela_name);*/
-            /*css = comp_syms_find_all("setcontext", new_comp->comp_syms);*/
-            /*free(css);*/
-            /*printf("DONE 2 %s\n", curr_rela_map->rela_name);*/
+            candidate_syms = comp_syms_find_all( curr_rela_map->rela_name,
+                    new_comp->comp_syms);
 
             if (*candidate_syms == NULL)
             {
@@ -1021,6 +992,7 @@ resolve_rela_syms(struct Compartment *new_comp)
                             curr_rela_map->rela_sym_type, j,
                             new_comp->libs[i]->lib_name, i);
                     }
+                    free(candidate_syms);
                     continue;
                 }
 
