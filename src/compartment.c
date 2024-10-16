@@ -12,8 +12,10 @@ extern const unsigned short max_env_count;
  * Forward declarations
  ******************************************************************************/
 
-static struct Compartment* comp_init();
-static struct LibDependency* lib_init();
+static struct Compartment *
+comp_init();
+static struct LibDependency *
+lib_init();
 
 static struct LibDependency *
 parse_lib_file(char *, struct Compartment *);
@@ -30,7 +32,7 @@ map_comp_entry_points(struct Compartment *);
 static void
 resolve_rela_syms(struct Compartment *);
 static void
-find_tls_lookup_func(struct Compartment*);
+find_tls_lookup_func(struct Compartment *);
 
 static bool
 check_lib_dep_sym(lib_symbol *, const unsigned short);
@@ -68,8 +70,7 @@ print_lib_dep(struct LibDependency *);
 /* Initialize some values of the Compartment struct. The rest are expected to
  * be set in `comp_from_elf`.
  */
-static
-struct Compartment *
+static struct Compartment *
 comp_init()
 {
     // TODO order
@@ -100,11 +101,10 @@ comp_init()
     return new_comp;
 }
 
-static
-struct LibDependency*
+static struct LibDependency *
 lib_init()
 {
-    struct LibDependency* new_lib = malloc(sizeof(struct LibDependency));
+    struct LibDependency *new_lib = malloc(sizeof(struct LibDependency));
 
     new_lib->lib_name = NULL;
     new_lib->lib_path = NULL;
@@ -450,7 +450,10 @@ parse_lib_file(char *lib_name, struct Compartment *new_comp)
         // TODO currently only $COMP_LIBRARY_PATH
         if (getenv(libs_path_env_var) == NULL)
         {
-            errx(1, "Environment variable `%s` for library dependencies paths not set!", libs_path_env_var);
+            errx(1,
+                "Environment variable `%s` for library dependencies paths not "
+                "set!",
+                libs_path_env_var);
         }
         lib_path = find_in_dir(lib_name, getenv(libs_path_env_var));
         if (!lib_path)
@@ -487,7 +490,6 @@ parse_lib_file(char *lib_name, struct Compartment *new_comp)
         new_lib->lib_path = malloc(strlen(lib_name) + 1);
         strcpy(new_lib->lib_path, lib_name);
     }
-
 
     parse_lib_segs(&lib_ehdr, lib_fd, new_lib, new_comp);
 
@@ -527,8 +529,7 @@ parse_lib_file(char *lib_name, struct Compartment *new_comp)
         do_pread(lib_fd, &curr_shdr, sizeof(Elf64_Shdr),
             lib_ehdr.e_shoff + i * sizeof(Elf64_Shdr));
 
-        if (curr_shdr.sh_type == SHT_SYMTAB ||
-                curr_shdr.sh_type == SHT_DYNSYM)
+        if (curr_shdr.sh_type == SHT_SYMTAB || curr_shdr.sh_type == SHT_DYNSYM)
         {
             parse_lib_symtb(&curr_shdr, &lib_ehdr, lib_fd, new_lib);
         }
@@ -939,7 +940,6 @@ resolve_rela_syms(struct Compartment *new_comp)
             curr_rela_map = &new_comp->libs[i]->rela_maps[j];
             chosen_sym = NULL;
 
-
             // This is a TLS variable that exists in the current library; we
             // just allocate the space for it
             if (curr_rela_map->rela_sym_type == STT_TLS
@@ -971,8 +971,8 @@ resolve_rela_syms(struct Compartment *new_comp)
                 continue;
             }
 
-            candidate_syms = comp_syms_find_all( curr_rela_map->rela_name,
-                    new_comp->comp_syms);
+            candidate_syms = comp_syms_find_all(
+                curr_rela_map->rela_name, new_comp->comp_syms);
 
             if (*candidate_syms == NULL)
             {
@@ -1009,7 +1009,7 @@ resolve_rela_syms(struct Compartment *new_comp)
             if (curr_rela_map->rela_sym_bind == STB_WEAK)
             {
                 comp_symbol *fallback_sym = NULL;
-                comp_symbol** candidate_syms_iter = candidate_syms;
+                comp_symbol **candidate_syms_iter = candidate_syms;
                 while (*candidate_syms_iter)
                 {
                     if (check_lib_dep_sym((*candidate_syms_iter)->sym_ref,
@@ -1060,9 +1060,9 @@ resolve_rela_syms(struct Compartment *new_comp)
  * `tls_lookup_func`
  */
 void
-find_tls_lookup_func(struct Compartment* comp)
+find_tls_lookup_func(struct Compartment *comp)
 {
-    comp_symbol* tls_lf = comp_syms_search(tls_rtld_dropin, comp->comp_syms);
+    comp_symbol *tls_lf = comp_syms_search(tls_rtld_dropin, comp->comp_syms);
     if (tls_lf)
     {
         comp->tls_lookup_func = eval_sym_offset(comp, tls_lf);
@@ -1122,7 +1122,7 @@ check_lib_dep_sym(lib_symbol *sym, const unsigned short rela_type)
 static char *
 find_in_dir(const char *const lib_name, char *search_dir)
 {
-    char* res = NULL;
+    char *res = NULL;
     assert(search_dir != NULL);
     char **search_paths = malloc(2 * sizeof(char *));
     search_paths[0] = search_dir;

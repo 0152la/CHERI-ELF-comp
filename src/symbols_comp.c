@@ -83,7 +83,8 @@ comp_syms_find_all(const char *to_find, comp_symbol_list *list)
     comp_symbol **res = calloc(MAX_FIND_ALL_COUNT, sizeof(comp_symbol *));
     if (!res)
     {
-        err(1, "Error allocating temporary memory for compartment symbol lookup!");
+        err(1,
+            "Error allocating temporary memory for compartment symbol lookup!");
     }
     unsigned int res_sz = 0;
     tommy_hashtable_node *curr_node
@@ -104,7 +105,7 @@ comp_syms_find_all(const char *to_find, comp_symbol_list *list)
 }
 
 void
-comp_syms_print(comp_symbol_list* list)
+comp_syms_print(comp_symbol_list *list)
 {
     tommy_hashtable_foreach(list, comp_syms_print_one);
 }
