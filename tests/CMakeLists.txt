@@ -7,6 +7,12 @@ add_executable(manager_call
 target_include_directories(manager_call PUBLIC ${BIN_INCLUDE_DIRS})
 target_link_libraries(manager_call PUBLIC chcomp)
 
+add_executable(manager_call_multi
+    ${TEST_DIR}/manager_caller_multiple.c
+    )
+target_include_directories(manager_call_multi PUBLIC ${BIN_INCLUDE_DIRS})
+target_link_libraries(manager_call_multi PUBLIC chcomp)
+
 add_executable(manager_args
     ${TEST_DIR}/manager_arg_passer.c
     )
