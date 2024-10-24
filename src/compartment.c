@@ -220,6 +220,7 @@ comp_map(struct Compartment *to_map)
     struct LibDependency *lib_dep;
     struct SegmentMap lib_dep_seg;
     int lib_dep_fd;
+
     for (size_t i = 0; i < to_map->libs_count; ++i)
     {
         lib_dep = to_map->libs[i];
@@ -227,9 +228,8 @@ comp_map(struct Compartment *to_map)
         for (size_t j = 0; j < lib_dep->lib_segs_count; ++j)
         {
             lib_dep_seg = lib_dep->lib_segs[j];
-            map_result = mmap((char *) lib_dep->lib_mem_base
-                    + (uintptr_t) lib_dep_seg.mem_bot,
-                lib_dep_seg.mem_sz,
+            map_result = mmap((char*) lib_dep->lib_mem_base
+                    + (uintptr_t) lib_dep_seg.mem_bot, lib_dep_seg.mem_sz,
                 PROT_READ | PROT_WRITE | PROT_EXEC, // TODO fix
                 MAP_PRIVATE | MAP_FIXED | MAP_ANONYMOUS, -1, 0);
             if (map_result == MAP_FAILED)
@@ -238,9 +238,9 @@ comp_map(struct Compartment *to_map)
                     lib_dep->lib_name, j);
             }
             do_pread(lib_dep_fd,
-                (char *) lib_dep->lib_mem_base
-                    + (uintptr_t) lib_dep_seg.mem_bot,
-                lib_dep_seg.file_sz, lib_dep_seg.offset);
+                     (char*) lib_dep->lib_mem_base
+                     + (uintptr_t) lib_dep_seg.mem_bot,
+                     lib_dep_seg.file_sz, lib_dep_seg.offset);
         }
         close(lib_dep_fd);
     }
@@ -309,6 +309,36 @@ comp_map(struct Compartment *to_map)
     to_map->mapped = true;
 }
 
+void
+comp_unmap(struct Compartment* to_unmap)
+{
+    int res;
+    struct LibDependency* lib_dep;
+    struct SegmentMap lib_dep_seg;
+    res
+        = munmap((void *) to_unmap->scratch_mem_base, to_unmap->scratch_mem_size);
+    if (res == -1)
+    {
+        err(1, "Error unmapping compartment %zu scratch memory", to_unmap->id);
+    }
+    for (size_t i = 0; i < to_unmap->libs_count; ++i)
+    {
+        lib_dep = to_unmap->libs[i];
+        for (size_t j = 0; j < lib_dep->lib_segs_count; ++j)
+        {
+            lib_dep_seg = lib_dep->lib_segs[j];
+            res = munmap((char*) lib_dep->lib_mem_base
+                    + (uintptr_t) lib_dep_seg.mem_bot, lib_dep_seg.mem_sz);
+            if (res == -1)
+            {
+                err(1, "Error unmapping library %s dependency segment idx %zu",
+                    lib_dep->lib_name, j);
+            }
+        }
+    }
+    to_unmap->mapped = false;
+}
+
 /* Execute a mapped compartment, by jumping to the appropriate entry point.
  *
  * The entry point is given as a function name in the `fn_name` argument, and
@@ -374,7 +404,7 @@ comp_clean(struct Compartment *to_clean)
 {
     if (to_clean->mapped)
     {
-        // TODO unmap
+        comp_unmap(to_clean);
     }
 
     struct LibDependency *curr_lib_dep;

@@ -219,6 +219,8 @@ comp_from_elf(char *, struct CompConfig *); // char **, size_t, void *);
 void
 comp_map(struct Compartment *);
 void
+comp_unmap(struct Compartment *);
+void
 comp_map_full(struct Compartment *);
 int64_t
 comp_exec(struct Compartment *, char *, void *, size_t);

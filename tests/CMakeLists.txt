@@ -136,6 +136,7 @@ endfunction()
 # Library tests
 set(func_binaries
     "test_map"
+    "test_map_multi"
     #"test_args_near_unmapped"
     #"test_two_comps"
     #"test_two_comps_inter_call"
@@ -211,6 +212,7 @@ set(tests
     "lua_suite_some"
 
     "test_map"
+    "test_map_multi"
     #"test_args_near_unmapped"
     #"test_two_comps"
     #"test_two_comps_inter_call"
