@@ -214,12 +214,19 @@ comp_map(struct Compartment *to_map)
 {
     assert(!(to_map->mapped));
     struct SegmentMap *curr_seg;
-    void *map_result;
 
     // Map compartment library dependencies segments
     struct LibDependency *lib_dep;
     struct SegmentMap lib_dep_seg;
     int lib_dep_fd;
+
+    void* map_result = mmap(to_map->base, (intptr_t) ((char*) to_map->mem_top - (char*) to_map->base),
+            PROT_READ | PROT_WRITE | PROT_EXEC, // TODO fix
+            MAP_PRIVATE | MAP_FIXED | MAP_ANONYMOUS, -1, 0);
+    if (map_result == MAP_FAILED)
+    {
+        err(1, "Error mapping compartment %zu data", to_map->id);
+    }
 
     for (size_t i = 0; i < to_map->libs_count; ++i)
     {
@@ -228,15 +235,6 @@ comp_map(struct Compartment *to_map)
         for (size_t j = 0; j < lib_dep->lib_segs_count; ++j)
         {
             lib_dep_seg = lib_dep->lib_segs[j];
-            map_result = mmap((char*) lib_dep->lib_mem_base
-                    + (uintptr_t) lib_dep_seg.mem_bot, lib_dep_seg.mem_sz,
-                PROT_READ | PROT_WRITE | PROT_EXEC, // TODO fix
-                MAP_PRIVATE | MAP_FIXED | MAP_ANONYMOUS, -1, 0);
-            if (map_result == MAP_FAILED)
-            {
-                err(1, "Error mapping library %s dependency segment idx %zu",
-                    lib_dep->lib_name, j);
-            }
             do_pread(lib_dep_fd,
                      (char*) lib_dep->lib_mem_base
                      + (uintptr_t) lib_dep_seg.mem_bot,
@@ -313,29 +311,20 @@ void
 comp_unmap(struct Compartment* to_unmap)
 {
     int res;
-    struct LibDependency* lib_dep;
-    struct SegmentMap lib_dep_seg;
+
+    res = munmap(to_unmap->base, (intptr_t) ((char*) to_unmap->mem_top - (char*) to_unmap->base));
+    if (res == -1)
+    {
+        err(1, "Error unmapping compartment %zu data", to_unmap->id);
+    }
+
     res
         = munmap((void *) to_unmap->scratch_mem_base, to_unmap->scratch_mem_size);
     if (res == -1)
     {
         err(1, "Error unmapping compartment %zu scratch memory", to_unmap->id);
     }
-    for (size_t i = 0; i < to_unmap->libs_count; ++i)
-    {
-        lib_dep = to_unmap->libs[i];
-        for (size_t j = 0; j < lib_dep->lib_segs_count; ++j)
-        {
-            lib_dep_seg = lib_dep->lib_segs[j];
-            res = munmap((char*) lib_dep->lib_mem_base
-                    + (uintptr_t) lib_dep_seg.mem_bot, lib_dep_seg.mem_sz);
-            if (res == -1)
-            {
-                err(1, "Error unmapping library %s dependency segment idx %zu",
-                    lib_dep->lib_name, j);
-            }
-        }
-    }
+
     to_unmap->mapped = false;
 }
 
