@@ -78,10 +78,8 @@ comp_init()
 
     new_comp->ddc = NULL;
 
-    new_comp->size = 0;
-    new_comp->base = NULL;
-    new_comp->mem_top = NULL;
-    new_comp->mapped = false;
+    new_comp->total_size = 0;
+    new_comp->data_size = 0;
 
     new_comp->scratch_mem_base = NULL;
     new_comp->scratch_mem_size = 0;
@@ -138,8 +136,6 @@ comp_from_elf(char *filename, struct CompConfig *cc)
 {
     struct Compartment *new_comp = comp_init();
     new_comp->cc = cc;
-    new_comp->base = cc->base_address; // TODO reuse `cc` base
-    new_comp->mem_top = cc->base_address;
 
     unsigned short libs_to_parse_count = 1;
     unsigned short libs_parsed_count = 0;
@@ -175,6 +171,7 @@ comp_from_elf(char *filename, struct CompConfig *cc)
 
     assert(cc->entry_points);
     assert(cc->entry_point_count > 0);
+    new_comp->total_size += align_up(new_comp->data_size + new_comp->page_size);
 
     init_comp_scratch_mem(new_comp);
     setup_environ(new_comp);
@@ -182,13 +179,13 @@ comp_from_elf(char *filename, struct CompConfig *cc)
     resolve_comp_tls_regions(new_comp);
     resolve_rela_syms(new_comp);
 
+    new_comp->total_size += new_comp->scratch_mem_size;
+
     // Compartment size sanity check
-    assert(new_comp->mem_top
-        == (char *) new_comp->base + // base compartment address
-            new_comp->size + // size of loaded ELF files
-            new_comp->page_size
-            + // buffer between scratch memory and compartment libraries
-            new_comp->scratch_mem_size // size of scratch memory
+    assert(new_comp->total_size
+        == align_up(new_comp->data_size, new_comp->page_size) + // size of loaded ELF files
+           new_comp->page_size + // buffer
+           new_comp->scratch_mem_size // size of scratch memory
     );
     assert(new_comp->scratch_mem_size % new_comp->page_size == 0);
 
@@ -210,9 +207,8 @@ comp_from_elf(char *filename, struct CompConfig *cc)
 /* Map a struct Compartment into memory, making it ready for execution
  */
 void
-comp_map(struct Compartment *to_map)
+comp_map(struct Compartment *to_map, void* addr)
 {
-    assert(!(to_map->mapped));
     struct SegmentMap *curr_seg;
 
     // Map compartment library dependencies segments
@@ -339,9 +335,6 @@ int64_t
 comp_exec(
     struct Compartment *to_exec, char *fn_name, void *args, size_t args_count)
 {
-    assert(
-        to_exec->mapped && "Attempting to execute an unmapped compartment.\n");
-
     void *fn = NULL;
     for (size_t i = 0; i < to_exec->cc->entry_point_count; ++i)
     {
@@ -645,7 +638,7 @@ parse_lib_segs(Elf64_Ehdr *lib_ehdr, void* lib_data, struct LibDependency *lib_d
     }
     lib_dep->lib_mem_base = align_up(
         (char *) new_comp->mem_top + new_comp->page_size, new_comp->page_size);
-    new_comp->size += lib_dep->lib_segs_size;
+    new_comp->data_size += lib_dep->lib_segs_size;
     new_comp->mem_top = (char *) lib_dep->lib_mem_base + lib_dep->lib_segs_size;
     if (lib_dep->tls_sec_addr)
     {
@@ -1179,9 +1172,7 @@ find_in_dir(const char *const lib_name, char *search_dir)
 static void
 init_comp_scratch_mem(struct Compartment *new_comp)
 {
-    new_comp->scratch_mem_base = align_up(
-        (char *) new_comp->base + new_comp->size + new_comp->page_size,
-        new_comp->page_size);
+    new_comp->scratch_mem_base = (void*) new_comp->total_size;
     new_comp->scratch_mem_heap_size = new_comp->cc->heap_size;
     new_comp->scratch_mem_stack_size = new_comp->cc->stack_size;
     new_comp->scratch_mem_stack_top = align_down(
@@ -1190,10 +1181,6 @@ init_comp_scratch_mem(struct Compartment *new_comp)
 
     new_comp->scratch_mem_size
         = new_comp->scratch_mem_heap_size + new_comp->scratch_mem_stack_size;
-
-    new_comp->mem_top = (char *) new_comp->mem_top
-        + ((char *) new_comp->scratch_mem_base - (char *) new_comp->mem_top)
-        + new_comp->scratch_mem_size;
 
     assert((uintptr_t) new_comp->scratch_mem_base % new_comp->page_size == 0);
     assert(
@@ -1206,6 +1193,7 @@ init_comp_scratch_mem(struct Compartment *new_comp)
             % 16
         == 0);
     assert(new_comp->scratch_mem_size % new_comp->page_size == 0);
+
 }
 
 static void
@@ -1215,7 +1203,6 @@ adjust_comp_scratch_mem(struct Compartment *new_comp, size_t to_adjust)
     new_comp->scratch_mem_size += to_adjust;
     new_comp->scratch_mem_stack_top
         = (char *) new_comp->scratch_mem_stack_top + to_adjust;
-    new_comp->mem_top = (char *) new_comp->mem_top + to_adjust;
     new_comp->scratch_mem_extra += to_adjust;
 }
 

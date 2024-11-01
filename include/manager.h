@@ -31,10 +31,10 @@ extern struct Compartment *loaded_comp;
 // Compartment configuration file suffix
 extern const char *comp_config_suffix;
 
-void *
-get_next_comp_addr(void);
 struct Compartment *
 register_new_comp(char *, bool);
+void
+map_comp(struct Compartment*, void*);
 int64_t
 exec_comp(struct Compartment *, char *, char **);
 

@@ -27,7 +27,12 @@ const size_t max_env_sz
     = max_env_count * sizeof(char *) + avg_sz_per_env_entry * max_env_count;
 extern char **environ;
 
-// Functions
+/*******************************************************************************
+ * Forward declarations
+ ******************************************************************************/
+
+static void *
+get_next_comp_addr(void);
 
 static struct CompConfig *
 parse_compartment_config_file(char *, bool);
@@ -114,7 +119,6 @@ register_new_comp(char *filename, bool allow_default_entry)
 
     struct CompConfig *new_cc
         = parse_compartment_config_file(filename, allow_default_entry);
-    new_cc->base_address = get_next_comp_addr();
     new_cc->env_ptr = proc_env_ptr;
     new_cc->env_ptr_sz = proc_env_ptr_sz;
     new_cc->env_ptr_count = proc_env_count;
@@ -138,6 +142,12 @@ register_new_comp(char *filename, bool allow_default_entry)
         sysconf(_SC_PAGESIZE));
 
     return new_comp;
+}
+
+void
+map_comp(struct Compartment* to_map, void* addr)
+{
+    comp_map(to_map, get_next_comp_addr);
 }
 
 int64_t

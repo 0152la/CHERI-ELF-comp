@@ -167,7 +167,6 @@ struct CompConfig
     size_t stack_size;
     struct CompEntryPointDef *entry_points;
     size_t entry_point_count;
-    void *base_address;
 
     char** env_ptr;
     size_t env_ptr_sz;
@@ -186,10 +185,8 @@ struct Compartment
     // Execution info
     void *__capability ddc;
     // ELF data
-    size_t size; // size of compartment in memory
-    void *base; // address where to load compartment
-    void *mem_top;
-    bool mapped;
+    size_t total_size; // size of compartment in memory
+    size_t data_size; // size of data segments of ELF files
 
     // Environ
     char **environ_ptr;
