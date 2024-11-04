@@ -76,8 +76,6 @@ comp_init()
     // TODO order
     struct Compartment *new_comp = malloc(sizeof(struct Compartment));
 
-    new_comp->ddc = NULL;
-
     new_comp->total_size = 0;
     new_comp->data_size = 0;
 
@@ -171,7 +169,7 @@ comp_from_elf(char *filename, struct CompConfig *cc)
 
     assert(cc->entry_points);
     assert(cc->entry_point_count > 0);
-    new_comp->total_size += align_up(new_comp->data_size + new_comp->page_size);
+    new_comp->total_size += align_up(new_comp->data_size + new_comp->page_size, new_comp->page_size);
 
     init_comp_scratch_mem(new_comp);
     setup_environ(new_comp);
@@ -206,52 +204,53 @@ comp_from_elf(char *filename, struct CompConfig *cc)
 
 /* Map a struct Compartment into memory, making it ready for execution
  */
-void
-comp_map(struct Compartment *to_map, void* addr)
-{
-    struct SegmentMap *curr_seg;
+/*void*/
+/*comp_map(struct Compartment *to_map, void* addr)*/
+/*{*/
+    /*struct SegmentMap *curr_seg;*/
 
-    // Map compartment library dependencies segments
-    struct LibDependency *lib_dep;
-    struct SegmentMap lib_dep_seg;
-    int lib_dep_fd;
+    /*// Map compartment library dependencies segments*/
+    /*struct LibDependency *lib_dep;*/
+    /*struct SegmentMap lib_dep_seg;*/
+    /*int lib_dep_fd;*/
 
-    void* map_result = mmap(to_map->base, (intptr_t) ((char*) to_map->mem_top - (char*) to_map->base),
-            PROT_READ | PROT_WRITE | PROT_EXEC, // TODO fix
-            MAP_PRIVATE | MAP_FIXED | MAP_ANONYMOUS, -1, 0);
-    if (map_result == MAP_FAILED)
-    {
-        err(1, "Error mapping compartment %zu data", to_map->id);
-    }
+    /*void* map_result = mmap(addr, to_map->total_size,*/
+    /*[>void* map_result = mmap(to_map->base, (intptr_t) ((char*) to_map->mem_top - (char*) to_map->base),<]*/
+            /*PROT_READ | PROT_WRITE | PROT_EXEC, // TODO fix*/
+            /*MAP_PRIVATE | MAP_FIXED | MAP_ANONYMOUS, -1, 0);*/
+    /*if (map_result == MAP_FAILED)*/
+    /*{*/
+        /*err(1, "Error mapping compartment %zu data", to_map->id);*/
+    /*}*/
 
-    for (size_t i = 0; i < to_map->libs_count; ++i)
-    {
-        lib_dep = to_map->libs[i];
-        lib_dep_fd = open(lib_dep->lib_path, O_RDONLY);
-        for (size_t j = 0; j < lib_dep->lib_segs_count; ++j)
-        {
-            lib_dep_seg = lib_dep->lib_segs[j];
-            do_pread(lib_dep_fd,
-                     (char*) lib_dep->lib_mem_base
-                     + (uintptr_t) lib_dep_seg.mem_bot,
-                     lib_dep_seg.file_sz, lib_dep_seg.offset);
-        }
-        close(lib_dep_fd);
-    }
+    /*for (size_t i = 0; i < to_map->libs_count; ++i)*/
+    /*{*/
+        /*lib_dep = to_map->libs[i];*/
+        /*lib_dep_fd = open(lib_dep->lib_path, O_RDONLY);*/
+        /*for (size_t j = 0; j < lib_dep->lib_segs_count; ++j)*/
+        /*{*/
+            /*lib_dep_seg = lib_dep->lib_segs[j];*/
+            /*do_pread(lib_dep_fd,*/
+                     /*(char*) lib_dep->lib_mem_base*/
+                     /*+ (uintptr_t) lib_dep_seg.mem_bot,*/
+                     /*lib_dep_seg.file_sz, lib_dep_seg.offset);*/
+        /*}*/
+        /*close(lib_dep_fd);*/
+    /*}*/
 
-    // Map compartment scratch memory - heap, stack, sealed manager
-    // capabilities for transition out, capabilities to call other compartments
-    // (TODO fix this), TLS region (if applicable)
-    assert((intptr_t) to_map->scratch_mem_base % to_map->page_size == 0);
-    assert(to_map->scratch_mem_size % to_map->page_size == 0);
-    map_result
-        = mmap((void *) to_map->scratch_mem_base, to_map->scratch_mem_size,
-            PROT_READ | PROT_WRITE, // | PROT_EXEC, // TODO Fix this
-            MAP_PRIVATE | MAP_FIXED | MAP_ANONYMOUS, -1, 0);
-    if (map_result == MAP_FAILED)
-    {
-        err(1, "Error mapping compartment %zu scratch memory", to_map->id);
-    }
+    /*// Map compartment scratch memory - heap, stack, sealed manager*/
+    /*// capabilities for transition out, capabilities to call other compartments*/
+    /*// (TODO fix this), TLS region (if applicable)*/
+    /*assert((intptr_t) to_map->scratch_mem_base % to_map->page_size == 0);*/
+    /*assert(to_map->scratch_mem_size % to_map->page_size == 0);*/
+    /*map_result*/
+        /*= mmap((void *) to_map->scratch_mem_base, to_map->scratch_mem_size,*/
+            /*PROT_READ | PROT_WRITE, // | PROT_EXEC, // TODO Fix this*/
+            /*MAP_PRIVATE | MAP_FIXED | MAP_ANONYMOUS, -1, 0);*/
+    /*if (map_result == MAP_FAILED)*/
+    /*{*/
+        /*err(1, "Error mapping compartment %zu scratch memory", to_map->id);*/
+    /*}*/
 
     /* Copy over environ variables
      *
@@ -259,66 +258,64 @@ comp_map(struct Compartment *to_map, void* addr)
      * create one. We don't expect this pointer to move, as the maximum allowed
      * size for the `environ` array is already allocated
      */
-    *to_map->environ_ptr = (char *) (to_map->environ_ptr + 1);
-    to_map->environ_ptr += 1;
+    //*to_map->environ_ptr = (char *) (to_map->environ_ptr + 1);
+    /*to_map->environ_ptr += 1;*/
 
-    // Copy over prepared `environ` data from manager
-    memcpy(to_map->environ_ptr, to_map->cc->env_ptr, to_map->cc->env_ptr_sz);
-    for (unsigned short i = 0; i < to_map->cc->env_ptr_count; ++i)
-    {
-        // Update entry offsets relative to compartment address
-        *(to_map->environ_ptr + i) += (uintptr_t) to_map->environ_ptr;
-    }
+    /*// Copy over prepared `environ` data from manager*/
+    /*memcpy(to_map->environ_ptr, to_map->cc->env_ptr, to_map->cc->env_ptr_sz);*/
+    /*for (unsigned short i = 0; i < to_map->cc->env_ptr_count; ++i)*/
+    /*{*/
+        /*// Update entry offsets relative to compartment address*/
+        /**(to_map->environ_ptr + i) += (uintptr_t) to_map->environ_ptr;*/
+    /*}*/
 
-    size_t tls_allocd = 0x0;
-    for (size_t i = 0; i < to_map->libs_count; ++i)
-    {
-        // Bind `.got.plt` entries
-        for (size_t j = 0; j < to_map->libs[i]->rela_maps_count; ++j)
-        {
-            assert(to_map->libs[i]->rela_maps[j].rela_address != 0);
-            if (to_map->libs[i]->rela_maps[j].target_func_address == 0)
-            {
-                continue;
-            }
-            memcpy(to_map->libs[i]->rela_maps[j].rela_address,
-                &to_map->libs[i]->rela_maps[j].target_func_address,
-                sizeof(void *));
-        }
+    /*size_t tls_allocd = 0x0;*/
+    /*for (size_t i = 0; i < to_map->libs_count; ++i)*/
+    /*{*/
+        /*// Bind `.got.plt` entries*/
+        /*for (size_t j = 0; j < to_map->libs[i]->rela_maps_count; ++j)*/
+        /*{*/
+            /*assert(to_map->libs[i]->rela_maps[j].rela_address != 0);*/
+            /*if (to_map->libs[i]->rela_maps[j].target_func_address == 0)*/
+            /*{*/
+                /*continue;*/
+            /*}*/
+            /*memcpy(to_map->libs[i]->rela_maps[j].rela_address,*/
+                /*&to_map->libs[i]->rela_maps[j].target_func_address,*/
+                /*sizeof(void *));*/
+        /*}*/
 
-        // Map .tdata sections
-        if (to_map->libs[i]->tls_data_size != 0)
-        {
-            assert(to_map->libs[i]->tls_sec_addr);
-            memcpy((char *) to_map->libs_tls_sects->region_start + tls_allocd,
-                to_map->libs[i]->tls_sec_addr, to_map->libs[i]->tls_data_size);
-            tls_allocd += to_map->libs[i]->tls_sec_size;
-        }
-    }
+        /*// Map .tdata sections*/
+        /*if (to_map->libs[i]->tls_data_size != 0)*/
+        /*{*/
+            /*assert(to_map->libs[i]->tls_sec_addr);*/
+            /*memcpy((char *) to_map->libs_tls_sects->region_start + tls_allocd,*/
+                /*to_map->libs[i]->tls_sec_addr, to_map->libs[i]->tls_data_size);*/
+            /*tls_allocd += to_map->libs[i]->tls_sec_size;*/
+        /*}*/
+    /*}*/
+/*}*/
 
-    to_map->mapped = true;
-}
+/*void*/
+/*comp_unmap(struct Compartment* to_unmap)*/
+/*{*/
+    /*int res;*/
 
-void
-comp_unmap(struct Compartment* to_unmap)
-{
-    int res;
+    /*res = munmap(to_unmap->base, (intptr_t) ((char*) to_unmap->mem_top - (char*) to_unmap->base));*/
+    /*if (res == -1)*/
+    /*{*/
+        /*err(1, "Error unmapping compartment %zu data", to_unmap->id);*/
+    /*}*/
 
-    res = munmap(to_unmap->base, (intptr_t) ((char*) to_unmap->mem_top - (char*) to_unmap->base));
-    if (res == -1)
-    {
-        err(1, "Error unmapping compartment %zu data", to_unmap->id);
-    }
+    /*res*/
+        /*= munmap((void *) to_unmap->scratch_mem_base, to_unmap->scratch_mem_size);*/
+    /*if (res == -1)*/
+    /*{*/
+        /*err(1, "Error unmapping compartment %zu scratch memory", to_unmap->id);*/
+    /*}*/
 
-    res
-        = munmap((void *) to_unmap->scratch_mem_base, to_unmap->scratch_mem_size);
-    if (res == -1)
-    {
-        err(1, "Error unmapping compartment %zu scratch memory", to_unmap->id);
-    }
-
-    to_unmap->mapped = false;
-}
+    /*to_unmap->mapped = false;*/
+/*}*/
 
 /* Execute a mapped compartment, by jumping to the appropriate entry point.
  *
@@ -331,60 +328,55 @@ comp_unmap(struct Compartment* to_unmap)
  * TODO casually ignore the situation where no compartment is passed, if we
  * prefer to default to `main` in that case
  */
-int64_t
-comp_exec(
-    struct Compartment *to_exec, char *fn_name, void *args, size_t args_count)
-{
-    void *fn = NULL;
-    for (size_t i = 0; i < to_exec->cc->entry_point_count; ++i)
-    {
-        if (!strcmp(fn_name, to_exec->cc->entry_points[i].name))
-        {
-            fn = (void *) to_exec->cc->entry_points[i].comp_addr;
-            break;
-        }
-    }
-    if (!fn)
-    {
-        errx(1, "Did not find entry point `%s`!\n", fn_name);
-    }
-    void *wrap_sp;
-
-    // TODO check if we need anything from here
-    // https://git.morello-project.org/morello/kernel/linux/-/wikis/Morello-pure-capability-kernel-user-Linux-ABI-specification
-
-    int64_t result;
-
-    // TODO handle register clobbering stuff (`syscall-restrict` example)
-    // https://github.com/capablevms/cheri_compartments/blob/master/code/signal_break.c#L46
-    assert(args_count <= 3);
-    // TODO attempt to lifting pointers to capabilities before passing to
-    // compartments. Might be needed when handling pointers.
-    /*void * __capability * args_caps;*/
-    /*for (size_t i = 0; i < args_count; ++i)*/
+/*int64_t*/
+/*comp_exec(*/
+    /*struct Compartment *to_exec, char *fn_name, void *args, size_t args_count)*/
+/*{*/
+    /*void *fn = NULL;*/
+    /*for (size_t i = 0; i < to_exec->cc->entry_point_count; ++i)*/
     /*{*/
-    /*void* __capability arg = (__cheri_tocap void* __capability) args[i];*/
-    /*arg = cheri_perms_and(arg, !(CHERI_PERM_STORE | CHERI_PERM_EXECUTE));*/
-    /*args_caps[i] = arg;*/
+        /*if (!strcmp(fn_name, to_exec->cc->entry_points[i].name))*/
+        /*{*/
+            /*fn = (void *) to_exec->cc->entry_points[i].comp_addr;*/
+            /*break;*/
+        /*}*/
     /*}*/
-    // TODO
-    // * set TPIDR_EL0 to TLS start, if given
-    // * make `tls_lookup_stub` get the index
-    // * fix statics?
-    result = comp_exec_in(to_exec->scratch_mem_stack_top, to_exec->ddc, fn,
-        args, args_count, sealed_redirect_cap,
-        to_exec->libs_tls_sects->region_start);
-    return result;
-}
+    /*if (!fn)*/
+    /*{*/
+        /*errx(1, "Did not find entry point `%s`!\n", fn_name);*/
+    /*}*/
+    /*void *wrap_sp;*/
+
+    /*// TODO check if we need anything from here*/
+    /*// https://git.morello-project.org/morello/kernel/linux/-/wikis/Morello-pure-capability-kernel-user-Linux-ABI-specification*/
+
+    /*int64_t result;*/
+
+    /*// TODO handle register clobbering stuff (`syscall-restrict` example)*/
+    /*// https://github.com/capablevms/cheri_compartments/blob/master/code/signal_break.c#L46*/
+    /*assert(args_count <= 3);*/
+    /*// TODO attempt to lifting pointers to capabilities before passing to*/
+    /*// compartments. Might be needed when handling pointers.*/
+    /*[>void * __capability * args_caps;<]*/
+    /*[>for (size_t i = 0; i < args_count; ++i)<]*/
+    /*[>{<]*/
+    /*[>void* __capability arg = (__cheri_tocap void* __capability) args[i];<]*/
+    /*[>arg = cheri_perms_and(arg, !(CHERI_PERM_STORE | CHERI_PERM_EXECUTE));<]*/
+    /*[>args_caps[i] = arg;<]*/
+    /*[>}<]*/
+    /*// TODO*/
+    /*// * set TPIDR_EL0 to TLS start, if given*/
+    /*// * make `tls_lookup_stub` get the index*/
+    /*// * fix statics?*/
+    /*result = comp_exec_in(to_exec->scratch_mem_stack_top, to_exec->ddc, fn,*/
+        /*args, args_count, sealed_redirect_cap,*/
+        /*to_exec->libs_tls_sects->region_start);*/
+    /*return result;*/
+/*}*/
 
 void
 comp_clean(struct Compartment *to_clean)
 {
-    if (to_clean->mapped)
-    {
-        comp_unmap(to_clean);
-    }
-
     struct LibDependency *curr_lib_dep;
     for (size_t i = 0; i < to_clean->libs_count; ++i)
     {
@@ -497,6 +489,7 @@ parse_lib_file(char *lib_name, struct Compartment *new_comp)
     }
 
     struct LibDependency *new_lib = lib_init();
+    new_lib->data_base = lib_data;
     new_lib->lib_name = malloc(strlen(lib_name) + 1);
     strcpy(new_lib->lib_name, lib_name);
     if (lib_path)
@@ -637,9 +630,8 @@ parse_lib_segs(Elf64_Ehdr *lib_ehdr, void* lib_data, struct LibDependency *lib_d
         free(this_seg);
     }
     lib_dep->lib_mem_base = align_up(
-        (char *) new_comp->mem_top + new_comp->page_size, new_comp->page_size);
+        (char *) new_comp->data_size + new_comp->page_size, new_comp->page_size);
     new_comp->data_size += lib_dep->lib_segs_size;
-    new_comp->mem_top = (char *) lib_dep->lib_mem_base + lib_dep->lib_segs_size;
     if (lib_dep->tls_sec_addr)
     {
         lib_dep->tls_sec_addr = (char *) lib_dep->tls_sec_addr
@@ -920,6 +912,13 @@ map_comp_entry_points(struct Compartment *new_comp)
     }
 }
 
+/* Resolve relocations with compartment relative addresses
+ *
+ * The way AARCH64 relocations work is that they use relative addresses for the
+ * lookup, so we only need to resolve the addresses within the compartment,
+ * without needing to know where the compartment will eventually be mapped in
+ * actual memory
+ */
 static void
 resolve_rela_syms(struct Compartment *new_comp)
 {

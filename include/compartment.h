@@ -106,7 +106,9 @@ struct LibDependency
 {
     char *lib_name;
     char *lib_path;
-    void *lib_mem_base;
+    void *lib_mem_base; // relative address in compartment
+    void* data_base; // address of data mapped in loader
+
 
     // Segments of interest (usually, of type `PT_LOAD`) within this library
     size_t lib_segs_count;
@@ -183,7 +185,6 @@ struct Compartment
     size_t id;
     struct CompConfig *cc;
     // Execution info
-    void *__capability ddc;
     // ELF data
     size_t total_size; // size of compartment in memory
     size_t data_size; // size of data segments of ELF files
@@ -218,7 +219,7 @@ entry_point_cmp(const void *, const void *);
 struct Compartment *
 comp_from_elf(char *, struct CompConfig *); // char **, size_t, void *);
 void
-comp_map(struct Compartment *);
+comp_map(struct Compartment *, void*);
 void
 comp_unmap(struct Compartment *);
 void
