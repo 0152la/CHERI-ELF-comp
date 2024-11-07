@@ -33,8 +33,6 @@ extern const char *comp_config_suffix;
 
 struct Compartment *
 register_new_comp(char *, bool);
-int64_t
-exec_comp(struct Compartment *, char *, char **);
 
 union arg_holder
 {
@@ -65,7 +63,7 @@ mapping_new_fixed(struct Compartment*, void*);
 void
 mapping_free(struct CompMapping*);
 int64_t
-mapping_exec(struct CompMapping*);
+mapping_exec(struct CompMapping*, char*, char**);
 
 struct
 CompMapping
@@ -73,6 +71,7 @@ CompMapping
     size_t id;
     void *__capability ddc;
     void* map_addr;
+    void* environ_addr;
     struct Compartment* comp;
 };
 

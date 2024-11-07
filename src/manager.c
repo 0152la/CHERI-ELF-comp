@@ -53,11 +53,14 @@ prepare_compartment_environ();
 static void *
 prepare_compartment_args(char **args, struct CompEntryPointDef);
 
+static void*
+comp_ptr_to_mapping_addr(void*, void*);
+
 static struct Compartment *
 get_comp(struct Compartment *);
 
 // Printing
-static void print_full_cap(uintcap_t);
+static void print_full_cap(void* __capability);
 static void
 pp_cap(void *__capability);
 static void
@@ -68,7 +71,7 @@ print_comp(struct Compartment *);
  ******************************************************************************/
 
 static void
-print_full_cap(uintcap_t cap)
+print_full_cap(void* __capability cap)
 {
     uint32_t words[4]; // Hack to demonstrate! In real code, be more careful
                        // about sizes, etc.
@@ -94,7 +97,7 @@ pp_cap(void *__capability ptr)
 
     uint64_t offset = cheri_offset_get(ptr);
 
-    printf("Capability: %#lp\n", ptr);
+    printf("Capability: %#lx\n", (uintptr_t) ptr);
     printf("Tag: %d, Perms: %04lx, Type: %lx, Address: %04lx, Base: %04lx, "
            "End: %04lx, Flags: %lx, "
            "Length: %04lx, Offset: %04lx\n",
@@ -151,21 +154,27 @@ register_new_comp(char *filename, bool allow_default_entry)
 struct CompMapping*
 mapping_new(struct Compartment* to_map)
 {
-    return mapping_new_fixed(to_map, get_next_comp_addr(to_map->total_size));
+    /*return mapping_new_fixed(to_map, get_next_comp_addr(to_map->total_size));*/
+    return mapping_new_fixed(to_map, NULL);
 }
 
 struct CompMapping*
 mapping_new_fixed(struct Compartment* to_map, void* addr)
 {
-    assert((uintptr_t) addr % to_map->page_size == 0);
+    int mmap_flags = MAP_PRIVATE | MAP_ANONYMOUS;
+    if (addr != NULL)
+    {
+        assert((uintptr_t) addr % to_map->page_size == 0);
+        mmap_flags |= MAP_FIXED;
+    }
     // Map new compartment
     void* map_result = mmap(addr, to_map->total_size,
-            PROT_READ | PROT_WRITE, // TODO fix?
-            MAP_PRIVATE | MAP_FIXED | MAP_ANONYMOUS, -1, 0);
+            PROT_READ | PROT_WRITE, mmap_flags, -1, 0);
     if (map_result == MAP_FAILED)
     {
         err(1, "Error mapping compartment %zu data at addr %p", to_map->id, addr);
     }
+    addr = map_result;
 
     // Copy over segment data
     struct LibDependency *lib_dep;
@@ -179,7 +188,7 @@ mapping_new_fixed(struct Compartment* to_map, void* addr)
             lib_dep_seg = lib_dep->lib_segs[j];
             seg_map_target = (char*) addr + (uintptr_t) lib_dep->lib_mem_base +
                 (uintptr_t) lib_dep_seg.mem_bot;
-            assert(seg_map_target % to_map->page_size == 0);
+            assert((uintptr_t) seg_map_target % to_map->page_size == 0);
             memcpy(seg_map_target, (char*) lib_dep->data_base +
                     lib_dep_seg.offset, lib_dep_seg.file_sz);
             mprotect(seg_map_target, lib_dep_seg.file_sz, lib_dep_seg.prot_flags);
@@ -192,18 +201,21 @@ mapping_new_fixed(struct Compartment* to_map, void* addr)
      * create one. We don't expect this pointer to move, as the maximum allowed
      * size for the `environ` array is already allocated
      */
-    *to_map->environ_ptr = (char *) (to_map->environ_ptr + 1);
-    to_map->environ_ptr += 1;
+
+    void* environ_addr = comp_ptr_to_mapping_addr(to_map->environ_ptr, addr);
+    *(char**) environ_addr = (char*) environ_addr + 1;
+    environ_addr = (char*) environ_addr + 1;
 
     // Copy over prepared `environ` data from manager
-    memcpy(to_map->environ_ptr, to_map->cc->env_ptr, to_map->cc->env_ptr_sz);
+    memcpy(environ_addr, to_map->cc->env_ptr, to_map->cc->env_ptr_sz);
     for (unsigned short i = 0; i < to_map->cc->env_ptr_count; ++i)
     {
         // Update entry offsets relative to compartment address
-        *(to_map->environ_ptr + i) += (uintptr_t) to_map->environ_ptr;
+        *((char**) environ_addr + i) += (uintptr_t) environ_addr;
     }
 
     size_t tls_allocd = 0x0;
+    uintptr_t rela_addr;
     for (size_t i = 0; i < to_map->libs_count; ++i)
     {
         // Bind `.got.plt` entries
@@ -214,17 +226,16 @@ mapping_new_fixed(struct Compartment* to_map, void* addr)
             {
                 continue;
             }
-            memcpy(to_map->libs[i]->rela_maps[j].rela_address,
-                &to_map->libs[i]->rela_maps[j].target_func_address,
-                sizeof(void *));
+            rela_addr = (uintptr_t) comp_ptr_to_mapping_addr(to_map->libs[i]->rela_maps[j].rela_address, addr);
+            *(uintptr_t*) rela_addr = (uintptr_t) comp_ptr_to_mapping_addr(to_map->libs[i]->rela_maps[j].target_func_address, to_map->libs[i]->data_base);
         }
 
         // Map .tdata sections
         if (to_map->libs[i]->tls_data_size != 0)
         {
             assert(to_map->libs[i]->tls_sec_addr);
-            memcpy((char *) to_map->libs_tls_sects->region_start + tls_allocd,
-                to_map->libs[i]->tls_sec_addr, to_map->libs[i]->tls_data_size);
+            memcpy((char *) to_map->libs_tls_sects->region_start + tls_allocd + (uintptr_t) addr,
+                comp_ptr_to_mapping_addr(to_map->libs[i]->tls_sec_addr, to_map->libs[i]->data_base), to_map->libs[i]->tls_data_size);
             tls_allocd += to_map->libs[i]->tls_sec_size;
         }
     }
@@ -233,13 +244,14 @@ mapping_new_fixed(struct Compartment* to_map, void* addr)
     new_mapping->id = 0; // TODO
     new_mapping->comp = to_map;
     new_mapping->map_addr = addr;
+    new_mapping->environ_addr = environ_addr;
     new_mapping->ddc = make_new_ddc(to_map, addr);
 
     return new_mapping;
 }
 
 void
-mapping_free(struct MappedCompartment* to_unmap)
+mapping_free(struct CompMapping* to_unmap)
 {
     int res;
 
@@ -252,6 +264,12 @@ mapping_free(struct MappedCompartment* to_unmap)
     free(to_unmap);
 }
 
+static void*
+comp_ptr_to_mapping_addr(void* comp_ptr, void* mapping_addr)
+{
+    return (char*) comp_ptr + (uintptr_t) mapping_addr;
+}
+
 /* Execute a mapped compartment, by jumping to the appropriate entry point.
  *
  * The entry point is given as a function name in the `fn_name` argument, and
@@ -261,14 +279,20 @@ mapping_free(struct MappedCompartment* to_unmap)
  * config file.
  */
 int64_t
-mapping_exec(struct MappedCompartment* to_exec, char* fn_name, void* args, size_t args_count)
+mapping_exec(struct CompMapping* to_exec, char* fn_name, char** fn_args_arr)
 {
+    struct CompConfig* to_exec_cc = to_exec->comp->cc;
+    struct CompEntryPointDef comp_entry
+        = get_entry_point(fn_name, to_exec_cc);
+
+    // TODO remove
     void *fn = NULL;
-    for (size_t i = 0; i < to_exec->comp->cc->entry_point_count; ++i)
+    for (size_t i = 0; i < to_exec_cc->entry_point_count; ++i)
     {
-        if (!strcmp(fn_name, to_exec->comp->cc->entry_points[i].name))
+        if (!strcmp(fn_name, to_exec_cc->entry_points[i].name))
         {
-            fn = (void *) ((char*) to_exec->comp->cc->entry_points[i].comp_addr + to_exec->addr);
+            fn = (void *) ((char*) to_exec_cc->entry_points[i].comp_addr +
+                    (uintptr_t) to_exec->map_addr);
             break;
         }
     }
@@ -277,28 +301,40 @@ mapping_exec(struct MappedCompartment* to_exec, char* fn_name, void* args, size_
         errx(1, "Did not find entry point `%s`!\n", fn_name);
     }
 
-    assert(args_count <= 3);
-    int64_t result = comp_exec_in((char*) to_exec->scratch_mem_stack_top + addr, to_exec->ddc, fn,
-        args, args_count, sealed_redirect_cap,
-        (char*) to_exec->libs_tls_sects->region_start + addr);
+    void *fn_args = prepare_compartment_args(fn_args_arr, comp_entry);
+    assert(comp_entry.arg_count <= 3); // TODO currently hard limited by
+                                       // number of registers in
+                                       // `comp_exec_in`
+    void* comp_sp =
+        comp_ptr_to_mapping_addr(
+                to_exec->comp->scratch_mem_stack_top,
+                to_exec->map_addr);
+    void* comp_tls_region_start =
+        comp_ptr_to_mapping_addr(
+                to_exec->comp->libs_tls_sects->region_start,
+                to_exec->map_addr);
+    int64_t result = comp_exec_in(comp_sp, to_exec->ddc, fn, fn_args,
+            comp_entry.arg_count, sealed_redirect_cap, (char*)
+            comp_tls_region_start);
+    free(fn_args);
     return result;
 }
 
-int64_t
-exec_comp(struct Compartment *to_exec, char *entry_fn, char **entry_fn_args)
-{
-    struct CompEntryPointDef comp_entry
-        = get_entry_point(entry_fn, to_exec->cc);
-    void *comp_args = prepare_compartment_args(entry_fn_args, comp_entry);
+/*int64_t*/
+/*exec_comp(struct Compartment *to_exec, char *entry_fn, char **entry_fn_args)*/
+/*{*/
+    /*struct CompEntryPointDef comp_entry*/
+        /*= get_entry_point(entry_fn, to_exec->cc);*/
+    /*void *comp_args = prepare_compartment_args(entry_fn_args, comp_entry);*/
 
-    struct Compartment *old_comp = loaded_comp;
-    loaded_comp = to_exec;
-    int64_t exec_res
-        = comp_exec(to_exec, entry_fn, comp_args, comp_entry.arg_count);
-    loaded_comp = old_comp;
+    /*struct Compartment *old_comp = loaded_comp;*/
+    /*loaded_comp = to_exec;*/
+    /*int64_t exec_res*/
+        /*= comp_exec(to_exec, entry_fn, comp_args, comp_entry.arg_count);*/
+    /*loaded_comp = old_comp;*/
 
-    return exec_res;
-}
+    /*return exec_res;*/
+/*}*/
 
 void
 clean_all_comps()
@@ -331,37 +367,6 @@ get_comp(struct Compartment *to_find)
         }
     }
     errx(1, "Couldn't find requested compartment with id %zu.", to_find->id);
-}
-
-struct Compartment *
-manager_find_compartment_by_addr(void *addr)
-{
-    size_t i;
-    for (i = 0; i < comps_count; ++i)
-    {
-        if (comps[i]->base <= addr
-            && (void *) ((char *) comps[i]->base + comps[i]->size) > addr)
-        {
-            break;
-        }
-    }
-    assert(i != comps_count);
-    return comps[i];
-}
-
-struct Compartment *
-manager_find_compartment_by_ddc(void *__capability ddc)
-{
-    size_t i;
-    for (i = 0; i < comps_count; ++i)
-    {
-        if (comps[i]->ddc == ddc)
-        {
-            return comps[i];
-        }
-    }
-    // TODO improve error message with ddc
-    errx(1, "Could not find compartment.");
 }
 
 struct Compartment *
@@ -593,7 +598,6 @@ make_default_comp_config()
     cc->stack_size = DEFAULT_COMP_STACK_SZ;
     cc->entry_points = make_default_comp_entry_point();
     cc->entry_point_count = 1;
-    cc->base_address = NULL;
     return cc;
 }
 
