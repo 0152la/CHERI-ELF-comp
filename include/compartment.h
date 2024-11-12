@@ -133,7 +133,7 @@ struct LibDependency
     size_t tls_data_size;
     // offset from TLS base pointer (i.e., value of `tpidr_el0`) where this
     // library's TLS variables start
-    size_t tls_offset;
+    size_t tls_offset; // TODO consider other type (`void*` or `ptrdiff_t`?)
 };
 
 /**
@@ -188,6 +188,7 @@ struct Compartment
     // ELF data
     size_t total_size; // size of compartment in memory
     size_t data_size; // size of data segments of ELF files
+    void* staged_addr; // address where compartment data is stored, ready for mapping
 
     // Environ
     char **environ_ptr;

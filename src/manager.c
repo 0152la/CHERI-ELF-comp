@@ -167,6 +167,7 @@ mapping_new_fixed(struct Compartment* to_map, void* addr)
         assert((uintptr_t) addr % to_map->page_size == 0);
         mmap_flags |= MAP_FIXED;
     }
+    printf("\tsz_in - %#zx\n", to_map->total_size);
     // Map new compartment
     void* map_result = mmap(addr, to_map->total_size,
             PROT_READ | PROT_WRITE, mmap_flags, -1, 0);
@@ -175,6 +176,7 @@ mapping_new_fixed(struct Compartment* to_map, void* addr)
         err(1, "Error mapping compartment %zu data at addr %p", to_map->id, addr);
     }
     addr = map_result;
+    printf("MMAP DONE - base %p sz %#zx\n", addr, to_map->total_size);
 
     // Copy over segment data
     struct LibDependency *lib_dep;
@@ -191,9 +193,11 @@ mapping_new_fixed(struct Compartment* to_map, void* addr)
             assert((uintptr_t) seg_map_target % to_map->page_size == 0);
             memcpy(seg_map_target, (char*) lib_dep->data_base +
                     lib_dep_seg.offset, lib_dep_seg.file_sz);
+            printf("\tTGT - %p - DIFF %p (lib %zu idx %zu)\n", seg_map_target, (void*) ((char*) seg_map_target - (char*) addr), i, j);
             mprotect(seg_map_target, lib_dep_seg.file_sz, lib_dep_seg.prot_flags);
         }
     }
+    printf("SEG DONE\n");
 
     /* Copy over environ variables
      *
@@ -213,6 +217,7 @@ mapping_new_fixed(struct Compartment* to_map, void* addr)
         // Update entry offsets relative to compartment address
         *((char**) environ_addr + i) += (uintptr_t) environ_addr;
     }
+    printf("ENV DONE\n");
 
     size_t tls_allocd = 0x0;
     uintptr_t rela_addr;
@@ -229,16 +234,24 @@ mapping_new_fixed(struct Compartment* to_map, void* addr)
             rela_addr = (uintptr_t) comp_ptr_to_mapping_addr(to_map->libs[i]->rela_maps[j].rela_address, addr);
             *(uintptr_t*) rela_addr = (uintptr_t) comp_ptr_to_mapping_addr(to_map->libs[i]->rela_maps[j].target_func_address, to_map->libs[i]->data_base);
         }
+        printf("RELA (%zu / %zu) DONE\n", i, to_map->libs_count);
 
         // Map .tdata sections
         if (to_map->libs[i]->tls_data_size != 0)
         {
+            /*printf("\t TLS from %p to %p sz %#zx\n", comp_ptr_to_mapping_addr(to_map->libs[i]->tls_sec_addr, to_map->libs[i]->data_base), (void*) ((char *) to_map->libs_tls_sects->region_start + tls_allocd + (uintptr_t) addr), to_map->libs[i]->tls_data_size);*/
             assert(to_map->libs[i]->tls_sec_addr);
-            memcpy((char *) to_map->libs_tls_sects->region_start + tls_allocd + (uintptr_t) addr,
-                comp_ptr_to_mapping_addr(to_map->libs[i]->tls_sec_addr, to_map->libs[i]->data_base), to_map->libs[i]->tls_data_size);
+            void* dst = comp_ptr_to_mapping_addr((char*) to_map->libs_tls_sects->region_start + tls_allocd, addr);
+            void* src = comp_ptr_to_mapping_addr((char*) to_map->libs[i]->tls_sec_addr + (uintptr_t) to_map->libs[i]->data_base, addr);
+            printf("\t TLS from %p to %p sz %#zx\n", src, dst, to_map->libs[i]->tls_data_size);
+            memcpy(dst, src, to_map->libs[i]->tls_data_size);
+            /*memcpy((char *) to_map->libs_tls_sects->region_start + tls_allocd + (uintptr_t) addr,*/
+                /*comp_ptr_to_mapping_addr(to_map->libs[i]->tls_sec_addr, to_map->libs[i]->data_base), to_map->libs[i]->tls_data_size);*/
             tls_allocd += to_map->libs[i]->tls_sec_size;
         }
+        printf("TLS (%zu / %zu) DONE\n", i, to_map->libs_count);
     }
+    printf("RELAS DONE\n");
 
     struct CompMapping* new_mapping = malloc(sizeof(struct CompMapping));
     new_mapping->id = 0; // TODO

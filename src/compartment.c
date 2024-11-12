@@ -57,6 +57,8 @@ static void
 setup_environ(struct Compartment *);
 static void
 resolve_comp_tls_regions(struct Compartment *);
+static void
+stage_comp(struct Compartment*);
 
 static void
 print_lib_dep_seg(struct SegmentMap *);
@@ -78,6 +80,7 @@ comp_init()
 
     new_comp->total_size = 0;
     new_comp->data_size = 0;
+    new_comp->staged_addr = NULL;
 
     new_comp->scratch_mem_base = NULL;
     new_comp->scratch_mem_size = 0;
@@ -169,15 +172,23 @@ comp_from_elf(char *filename, struct CompConfig *cc)
 
     assert(cc->entry_points);
     assert(cc->entry_point_count > 0);
-    new_comp->total_size += align_up(new_comp->data_size + new_comp->page_size, new_comp->page_size);
+    new_comp->total_size += align_up(new_comp->data_size + new_comp->page_size,
+            new_comp->page_size);
 
     init_comp_scratch_mem(new_comp);
     setup_environ(new_comp);
     map_comp_entry_points(new_comp);
     resolve_comp_tls_regions(new_comp);
-    resolve_rela_syms(new_comp);
 
+    // Update total compartment size, by adding additional scratch + extra
+    // (TLS, environ) memory needs
     new_comp->total_size += new_comp->scratch_mem_size;
+
+    // All data collected; map compartment to a staging area ...
+    stage_comp(new_comp);
+
+    // ... and perform relocations
+    resolve_rela_syms(new_comp);
 
     // Compartment size sanity check
     assert(new_comp->total_size
@@ -622,7 +633,7 @@ parse_lib_segs(Elf64_Ehdr *lib_ehdr, void* lib_data, struct LibDependency *lib_d
 
         lib_dep->lib_segs_count += 1;
         lib_dep->lib_segs_size
-            += align_up(this_seg->mem_sz, lib_phdr.p_align); // TODO check
+            += align_up(this_seg->mem_sz, lib_phdr.p_align);
         lib_dep->lib_segs = realloc(lib_dep->lib_segs,
             lib_dep->lib_segs_count * sizeof(struct SegmentMap));
         memcpy(&lib_dep->lib_segs[lib_dep->lib_segs_count - 1], this_seg,
@@ -927,10 +938,9 @@ resolve_rela_syms(struct Compartment *new_comp)
     struct LibRelaMapping *curr_rela_map;
     comp_symbol **candidate_syms;
     comp_symbol *chosen_sym;
-    bool lel = true;
+    void* rela_target;
     for (size_t i = 0; i < new_comp->libs_count; ++i)
     {
-        lel = true;
         for (size_t j = 0; j < new_comp->libs[i]->rela_maps_count; ++j)
         {
             curr_rela_map = &new_comp->libs[i]->rela_maps[j];
@@ -1037,15 +1047,16 @@ resolve_rela_syms(struct Compartment *new_comp)
             }
             free(candidate_syms);
 
+            // TODO collapse?
             if (curr_rela_map->rela_sym_type == STT_TLS)
             {
-                curr_rela_map->target_func_address
-                    = eval_sym_tls_offset(new_comp, chosen_sym);
+                rela_target = eval_staged_sym_tls_offset(new_comp, chosen_sym);
+                memcpy(curr_rela_map->rela_addr, &rela_target, sizeof(void*));
             }
             else
             {
-                curr_rela_map->target_func_address
-                    = eval_sym_offset(new_comp, chosen_sym);
+                rela_target = eval_staged_sym_offset(new_comp, chosen_sym);
+                memcpy(curr_rela_map->rela_addr, &rela_target, sizeof(void*));
             }
         }
         prev_tls_secs_size += new_comp->libs[i]->tls_sec_size;
@@ -1092,11 +1103,29 @@ seek_lib_data(void* lib_data, off_t offset)
     return (void*) ((char*) lib_data + offset);
 }
 
+static void*
+eval_staged_sym_offset(struct Compartment* comp, const comp_symbol* sym)
+{
+    assert(comp->staged_addr != NULL);
+    return (char*) comp->staged_addr +
+        (uintptr_t) comp->libs[sym->sym_lib_idx]->lib_mem_base +
+        (uintptr_t) sym->sym_ref->sym_offset;
+}
+
+static void *
+eval_staged_sym_tls_offset(struct Compartment *comp, const comp_symbol *sym)
+{
+    assert(comp->staged_addr != NULL);
+    return (char*) comp->staged_addr +
+        + (uintptr_t) sym->sym_ref->sym_offset
+        + comp->libs[sym->sym_lib_idx]->tls_offset; // TODO check offset type
+}
+
 static void *
 eval_sym_offset(struct Compartment *comp, const comp_symbol *sym)
 {
     return (char *) comp->libs[sym->sym_lib_idx]->lib_mem_base
-        + (intptr_t) sym->sym_ref->sym_offset;
+        + (uintptr_t) sym->sym_ref->sym_offset;
 }
 
 static void *
@@ -1104,7 +1133,7 @@ eval_lib_sym_offset(
     struct Compartment *comp, const size_t lib_idx, const lib_symbol *sym)
 {
     return (char *) comp->libs[lib_idx]->lib_mem_base
-        + (intptr_t) sym->sym_offset;
+        + (uintptr_t) sym->sym_offset;
 }
 
 static void *
@@ -1263,6 +1292,57 @@ resolve_comp_tls_regions(struct Compartment *new_comp)
     adjust_comp_scratch_mem(new_comp, total_tls_size);
     new_comp->total_tls_size = total_tls_size;
     new_comp->libs_tls_sects->region_size = comp_tls_size;
+}
+
+static void
+stage_comp(struct Compartment* to_stage)
+{
+    void* base_stage_addr = mmap(addr, to_stage->total_size,
+            PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+    if (base_stage_addr == MAP_FAILED)
+    {
+        err(1, "Error staging compartment %zu", to_map->id);
+    }
+
+    // Copy over segment data
+    struct LibDependency *lib_dep;
+    struct SegmentMap lib_dep_seg;
+    void* seg_map_target;
+    for (size_t i = 0; i < to_map->libs_count; ++i)
+    {
+        lib_dep = to_map->libs[i];
+        for (size_t j = 0; j < lib_dep->lib_segs_count; ++j)
+        {
+            lib_dep_seg = lib_dep->lib_segs[j];
+            seg_map_target = (char*) base_stage_addr + (uintptr_t) lib_dep->lib_mem_base +
+                (uintptr_t) lib_dep_seg.mem_bot;
+            assert((uintptr_t) seg_map_target % to_map->page_size == 0);
+            memcpy(seg_map_target, (char*) lib_dep->data_base +
+                    lib_dep_seg.offset, lib_dep_seg.file_sz);
+        }
+        free(lib_dep->data_base);
+    }
+
+    /* Copy over environ variables
+     *
+     * We need a pointer to an array of string pointers, so we synthetically
+     * create one. We don't expect this pointer to move, as the maximum allowed
+     * size for the `environ` array is already allocated
+     */
+
+    void* environ_addr = (char*) base_stage_addr + (uintptr_t) to_map->environ_ptr;
+    *(char**) environ_addr = (char*) environ_addr + 1;
+    environ_addr = (char*) environ_addr + 1;
+
+    // Copy over prepared `environ` data from manager
+    memcpy(environ_addr, to_map->cc->env_ptr, to_map->cc->env_ptr_sz);
+    for (unsigned short i = 0; i < to_map->cc->env_ptr_count; ++i)
+    {
+        // Update entry offsets relative to compartment address
+        *((char**) environ_addr + i) += (uintptr_t) environ_addr;
+    }
+
+    to_stage->staged_addr = base_stage_addr;
 }
 
 /*******************************************************************************
