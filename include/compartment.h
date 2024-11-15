@@ -107,8 +107,9 @@ struct LibDependency
     char *lib_name;
     char *lib_path;
     void *lib_mem_base; // relative address in compartment
-    void* data_base; // address of data mapped in loader
 
+    void* data_base; // address of data mapped in loader
+    size_t data_size; // size of mapped data
 
     // Segments of interest (usually, of type `PT_LOAD`) within this library
     size_t lib_segs_count;

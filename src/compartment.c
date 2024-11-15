@@ -32,6 +32,10 @@ find_tls_lookup_func(struct Compartment *);
 
 static bool
 check_lib_dep_sym(lib_symbol *, const unsigned short);
+static void*
+eval_staged_sym_offset(struct Compartment*, const comp_symbol*);
+static void*
+eval_staged_sym_tls_offset(struct Compartment*, const comp_symbol*);
 static void *
 eval_sym_offset(struct Compartment *, const comp_symbol *);
 static void *
@@ -64,6 +68,8 @@ static void
 print_lib_dep_seg(struct SegmentMap *);
 static void
 print_lib_dep(struct LibDependency *);
+static void
+print_comp_simple(struct Compartment*);
 
 /*******************************************************************************
  * Main compartment functions
@@ -210,6 +216,7 @@ comp_from_elf(char *filename, struct CompConfig *cc)
     assert(new_comp->environ_sz + new_comp->total_tls_size
         == new_comp->scratch_mem_extra);
 
+    print_comp_simple(new_comp);
     return new_comp;
 }
 
@@ -501,6 +508,7 @@ parse_lib_file(char *lib_name, struct Compartment *new_comp)
 
     struct LibDependency *new_lib = lib_init();
     new_lib->data_base = lib_data;
+    new_lib->data_size = lib_fd_stat.st_size;
     new_lib->lib_name = malloc(strlen(lib_name) + 1);
     strcpy(new_lib->lib_name, lib_name);
     if (lib_path)
@@ -1051,12 +1059,16 @@ resolve_rela_syms(struct Compartment *new_comp)
             if (curr_rela_map->rela_sym_type == STT_TLS)
             {
                 rela_target = eval_staged_sym_tls_offset(new_comp, chosen_sym);
-                memcpy(curr_rela_map->rela_addr, &rela_target, sizeof(void*));
+                memcpy((char*) new_comp->staged_addr + (uintptr_t)
+                        curr_rela_map->rela_address, &rela_target,
+                        sizeof(void*));
             }
             else
             {
-                rela_target = eval_staged_sym_offset(new_comp, chosen_sym);
-                memcpy(curr_rela_map->rela_addr, &rela_target, sizeof(void*));
+                curr_rela_map->target_func_address = eval_staged_sym_offset(new_comp, chosen_sym);
+                /*memcpy((char*) new_comp->staged_addr + (uintptr_t)*/
+                        /*curr_rela_map->rela_address, &rela_target,*/
+                        /*sizeof(void*));*/
             }
         }
         prev_tls_secs_size += new_comp->libs[i]->tls_sec_size;
@@ -1107,8 +1119,8 @@ static void*
 eval_staged_sym_offset(struct Compartment* comp, const comp_symbol* sym)
 {
     assert(comp->staged_addr != NULL);
-    return (char*) comp->staged_addr +
-        (uintptr_t) comp->libs[sym->sym_lib_idx]->lib_mem_base +
+    return
+        (char*) comp->libs[sym->sym_lib_idx]->lib_mem_base +
         (uintptr_t) sym->sym_ref->sym_offset;
 }
 
@@ -1297,30 +1309,32 @@ resolve_comp_tls_regions(struct Compartment *new_comp)
 static void
 stage_comp(struct Compartment* to_stage)
 {
-    void* base_stage_addr = mmap(addr, to_stage->total_size,
+    void* base_stage_addr = mmap(NULL, to_stage->total_size,
             PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
     if (base_stage_addr == MAP_FAILED)
     {
-        err(1, "Error staging compartment %zu", to_map->id);
+        err(1, "Error staging compartment %zu", to_stage->id);
     }
 
     // Copy over segment data
     struct LibDependency *lib_dep;
     struct SegmentMap lib_dep_seg;
     void* seg_map_target;
-    for (size_t i = 0; i < to_map->libs_count; ++i)
+    for (size_t i = 0; i < to_stage->libs_count; ++i)
     {
-        lib_dep = to_map->libs[i];
+        lib_dep = to_stage->libs[i];
         for (size_t j = 0; j < lib_dep->lib_segs_count; ++j)
         {
             lib_dep_seg = lib_dep->lib_segs[j];
             seg_map_target = (char*) base_stage_addr + (uintptr_t) lib_dep->lib_mem_base +
                 (uintptr_t) lib_dep_seg.mem_bot;
-            assert((uintptr_t) seg_map_target % to_map->page_size == 0);
+            assert((uintptr_t) seg_map_target % to_stage->page_size == 0);
             memcpy(seg_map_target, (char*) lib_dep->data_base +
                     lib_dep_seg.offset, lib_dep_seg.file_sz);
         }
-        free(lib_dep->data_base);
+        munmap(lib_dep->data_base, lib_dep->data_size);
+        lib_dep->data_base = NULL;
+        lib_dep->data_size = 0;
     }
 
     /* Copy over environ variables
@@ -1330,13 +1344,13 @@ stage_comp(struct Compartment* to_stage)
      * size for the `environ` array is already allocated
      */
 
-    void* environ_addr = (char*) base_stage_addr + (uintptr_t) to_map->environ_ptr;
+    void* environ_addr = (char*) base_stage_addr + (uintptr_t) to_stage->environ_ptr;
     *(char**) environ_addr = (char*) environ_addr + 1;
     environ_addr = (char*) environ_addr + 1;
 
     // Copy over prepared `environ` data from manager
-    memcpy(environ_addr, to_map->cc->env_ptr, to_map->cc->env_ptr_sz);
-    for (unsigned short i = 0; i < to_map->cc->env_ptr_count; ++i)
+    memcpy(environ_addr, to_stage->cc->env_ptr, to_stage->cc->env_ptr_sz);
+    for (unsigned short i = 0; i < to_stage->cc->env_ptr_count; ++i)
     {
         // Update entry offsets relative to compartment address
         *((char**) environ_addr + i) += (uintptr_t) environ_addr;
@@ -1384,4 +1398,17 @@ print_lib_dep(struct LibDependency *lib_dep)
 
     printf("- rela_maps_count : %zu\n", lib_dep->rela_maps_count);
     printf("== DONE\n");
+}
+
+static void
+print_comp_simple(struct Compartment* to_print)
+{
+    printf("== COMPARTMENT SIMPLE -- ID %zu\n", to_print->id);
+    printf("-- staged_addr : %p\n", to_print->staged_addr);
+    printf("-- total_size : %#zx\n", to_print->total_size);
+    printf("-- data_size: %#zx\n", to_print->data_size);
+    for (size_t i = 0; i < to_print->libs_count; ++i)
+    {
+        printf("\t* lib %zu `%s` >> %p\n", i, to_print->libs[i]->lib_name, to_print->libs[i]->lib_mem_base);
+    }
 }

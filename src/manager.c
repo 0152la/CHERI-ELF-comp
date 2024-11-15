@@ -65,6 +65,8 @@ static void
 pp_cap(void *__capability);
 static void
 print_comp(struct Compartment *);
+static void
+print_mapping_simple(struct CompMapping*);
 
 /*******************************************************************************
  * Utility functions
@@ -167,18 +169,19 @@ mapping_new_fixed(struct Compartment* to_map, void* addr)
         assert((uintptr_t) addr % to_map->page_size == 0);
         mmap_flags |= MAP_FIXED;
     }
-    printf("\tsz_in - %#zx\n", to_map->total_size);
     // Map new compartment
     void* map_result = mmap(addr, to_map->total_size,
-            PROT_READ | PROT_WRITE, mmap_flags, -1, 0);
+            PROT_READ | PROT_WRITE | PROT_EXEC, mmap_flags, -1, 0);
     if (map_result == MAP_FAILED)
     {
         err(1, "Error mapping compartment %zu data at addr %p", to_map->id, addr);
     }
     addr = map_result;
-    printf("MMAP DONE - base %p sz %#zx\n", addr, to_map->total_size);
 
-    // Copy over segment data
+    printf("MMAP %p to %p (sz %#zx)\n", addr, (void*) ((char*) addr + (uintptr_t) to_map->total_size), to_map->total_size);
+    memcpy(addr, to_map->staged_addr, to_map->total_size);
+
+    // Set appropriate `mprotect` flags
     struct LibDependency *lib_dep;
     struct SegmentMap lib_dep_seg;
     void* seg_map_target;
@@ -191,73 +194,38 @@ mapping_new_fixed(struct Compartment* to_map, void* addr)
             seg_map_target = (char*) addr + (uintptr_t) lib_dep->lib_mem_base +
                 (uintptr_t) lib_dep_seg.mem_bot;
             assert((uintptr_t) seg_map_target % to_map->page_size == 0);
-            memcpy(seg_map_target, (char*) lib_dep->data_base +
-                    lib_dep_seg.offset, lib_dep_seg.file_sz);
-            printf("\tTGT - %p - DIFF %p (lib %zu idx %zu)\n", seg_map_target, (void*) ((char*) seg_map_target - (char*) addr), i, j);
-            mprotect(seg_map_target, lib_dep_seg.file_sz, lib_dep_seg.prot_flags);
+            if (mprotect(seg_map_target, lib_dep_seg.mem_sz, lib_dep_seg.prot_flags) != 0)
+            {
+                err(1, "Error setting permissions for %p (lib %zu seg %zu)", seg_map_target, i, j);
+            }
         }
     }
-    printf("SEG DONE\n");
 
-    /* Copy over environ variables
-     *
-     * We need a pointer to an array of string pointers, so we synthetically
-     * create one. We don't expect this pointer to move, as the maximum allowed
-     * size for the `environ` array is already allocated
-     */
-
-    void* environ_addr = comp_ptr_to_mapping_addr(to_map->environ_ptr, addr);
-    *(char**) environ_addr = (char*) environ_addr + 1;
-    environ_addr = (char*) environ_addr + 1;
-
-    // Copy over prepared `environ` data from manager
-    memcpy(environ_addr, to_map->cc->env_ptr, to_map->cc->env_ptr_sz);
-    for (unsigned short i = 0; i < to_map->cc->env_ptr_count; ++i)
+    // Perform relocations
+    struct LibRelaMapping* curr_rela_map;
+    for (size_t lib_idx = 0; lib_idx < to_map->libs_count; ++lib_idx)
     {
-        // Update entry offsets relative to compartment address
-        *((char**) environ_addr + i) += (uintptr_t) environ_addr;
-    }
-    printf("ENV DONE\n");
-
-    size_t tls_allocd = 0x0;
-    uintptr_t rela_addr;
-    for (size_t i = 0; i < to_map->libs_count; ++i)
-    {
-        // Bind `.got.plt` entries
-        for (size_t j = 0; j < to_map->libs[i]->rela_maps_count; ++j)
+        for (size_t rela_idx = 0; rela_idx < to_map->libs[lib_idx]->rela_maps_count; ++rela_idx)
         {
-            assert(to_map->libs[i]->rela_maps[j].rela_address != 0);
-            if (to_map->libs[i]->rela_maps[j].target_func_address == 0)
+            curr_rela_map = &to_map->libs[lib_idx]->rela_maps[rela_idx];
+            if (curr_rela_map->rela_sym_type == STT_TLS &&
+                    curr_rela_map->target_func_address != 0x0)
             {
                 continue;
             }
-            rela_addr = (uintptr_t) comp_ptr_to_mapping_addr(to_map->libs[i]->rela_maps[j].rela_address, addr);
-            *(uintptr_t*) rela_addr = (uintptr_t) comp_ptr_to_mapping_addr(to_map->libs[i]->rela_maps[j].target_func_address, to_map->libs[i]->data_base);
+            *(void**)((char*) curr_rela_map->rela_address + (uintptr_t) addr) = (char*)
+                curr_rela_map->target_func_address + (uintptr_t) addr;
+            /*memcpy((char*) curr_rela_map->rela_address + (uintptr_t) addr,*/
+                    /*&((char*) curr_rela_map->target_func_address + (uintptr_t) addr,*/
+                    /*sizeof(void*));*/
         }
-        printf("RELA (%zu / %zu) DONE\n", i, to_map->libs_count);
-
-        // Map .tdata sections
-        if (to_map->libs[i]->tls_data_size != 0)
-        {
-            /*printf("\t TLS from %p to %p sz %#zx\n", comp_ptr_to_mapping_addr(to_map->libs[i]->tls_sec_addr, to_map->libs[i]->data_base), (void*) ((char *) to_map->libs_tls_sects->region_start + tls_allocd + (uintptr_t) addr), to_map->libs[i]->tls_data_size);*/
-            assert(to_map->libs[i]->tls_sec_addr);
-            void* dst = comp_ptr_to_mapping_addr((char*) to_map->libs_tls_sects->region_start + tls_allocd, addr);
-            void* src = comp_ptr_to_mapping_addr((char*) to_map->libs[i]->tls_sec_addr + (uintptr_t) to_map->libs[i]->data_base, addr);
-            printf("\t TLS from %p to %p sz %#zx\n", src, dst, to_map->libs[i]->tls_data_size);
-            memcpy(dst, src, to_map->libs[i]->tls_data_size);
-            /*memcpy((char *) to_map->libs_tls_sects->region_start + tls_allocd + (uintptr_t) addr,*/
-                /*comp_ptr_to_mapping_addr(to_map->libs[i]->tls_sec_addr, to_map->libs[i]->data_base), to_map->libs[i]->tls_data_size);*/
-            tls_allocd += to_map->libs[i]->tls_sec_size;
-        }
-        printf("TLS (%zu / %zu) DONE\n", i, to_map->libs_count);
     }
-    printf("RELAS DONE\n");
 
     struct CompMapping* new_mapping = malloc(sizeof(struct CompMapping));
     new_mapping->id = 0; // TODO
     new_mapping->comp = to_map;
     new_mapping->map_addr = addr;
-    new_mapping->environ_addr = environ_addr;
+    /*new_mapping->environ_addr = (void*) ((intptr_t) environ_addr - (intptr_t) to_map->staged_addr + (intptr_t) addr);*/
     new_mapping->ddc = make_new_ddc(to_map, addr);
 
     return new_mapping;
@@ -294,6 +262,8 @@ comp_ptr_to_mapping_addr(void* comp_ptr, void* mapping_addr)
 int64_t
 mapping_exec(struct CompMapping* to_exec, char* fn_name, char** fn_args_arr)
 {
+    print_mapping_simple(to_exec);
+
     struct CompConfig* to_exec_cc = to_exec->comp->cc;
     struct CompEntryPointDef comp_entry
         = get_entry_point(fn_name, to_exec_cc);
@@ -653,4 +623,18 @@ print_comp(struct Compartment *to_print)
     printf("- page_size : %lu\n", to_print->page_size);
 
     printf("== DONE\n");
+}
+
+static void
+print_mapping_simple(struct CompMapping* to_print)
+{
+    printf("== MAPPING SIMPLE -- ID %zu\n", to_print->id);
+    printf("-- map_addr : %p\n", to_print->map_addr);
+    printf("-- DDC : ");
+    print_full_cap(to_print->ddc);
+    printf("-- total_size : %#zx\n", to_print->comp->total_size);
+    for (size_t i = 0; i < to_print->comp->libs_count; ++i)
+    {
+        printf("\t* lib %zu `%s` >> %p\n", i, to_print->comp->libs[i]->lib_name, (void*) ((char*) to_print->comp->libs[i]->lib_mem_base + (uintptr_t) to_print->map_addr));
+    }
 }
