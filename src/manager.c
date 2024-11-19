@@ -178,7 +178,6 @@ mapping_new_fixed(struct Compartment* to_map, void* addr)
     }
     addr = map_result;
 
-    printf("MMAP %p to %p (sz %#zx)\n", addr, (void*) ((char*) addr + (uintptr_t) to_map->total_size), to_map->total_size);
     memcpy(addr, to_map->staged_addr, to_map->total_size);
 
     // Set appropriate `mprotect` flags
@@ -201,6 +200,15 @@ mapping_new_fixed(struct Compartment* to_map, void* addr)
         }
     }
 
+    // Update `environ` pointers
+    void* environ_addr = (char*) to_map->environ_ptr + (uintptr_t) addr;
+
+    // We update all `environ` entries, as well as the `environ` pointer itself
+    for (unsigned short i = 0; i < to_map->cc->env_ptr_count + 1; ++i)
+    {
+        *((char**) environ_addr + i) += (uintptr_t) addr;
+    }
+
     // Perform relocations
     struct LibRelaMapping* curr_rela_map;
     for (size_t lib_idx = 0; lib_idx < to_map->libs_count; ++lib_idx)
@@ -212,6 +220,11 @@ mapping_new_fixed(struct Compartment* to_map, void* addr)
                     curr_rela_map->target_func_address != 0x0)
             {
                 continue;
+            }
+            /*printf("RN - %s\n", curr_rela_map->rela_name);*/
+            if (curr_rela_map->rela_name && !strcmp(curr_rela_map->rela_name, "environ"))
+            {
+                printf("RELA NAME %s ADDR %p TARGET %p\n", curr_rela_map->rela_name, curr_rela_map->rela_address, curr_rela_map->target_func_address);
             }
             *(void**)((char*) curr_rela_map->rela_address + (uintptr_t) addr) = (char*)
                 curr_rela_map->target_func_address + (uintptr_t) addr;

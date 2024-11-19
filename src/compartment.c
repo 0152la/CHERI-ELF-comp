@@ -1319,13 +1319,16 @@ stage_comp(struct Compartment* to_stage)
         err(1, "Error staging compartment %zu", to_stage->id);
     }
 
-    // Copy over segment data
+    // Copy over segment data and `.tdata`
     struct LibDependency *lib_dep;
     struct SegmentMap lib_dep_seg;
     void* seg_map_target;
+    size_t tls_allocd = 0x0;
     for (size_t i = 0; i < to_stage->libs_count; ++i)
     {
         lib_dep = to_stage->libs[i];
+
+        // Segment data
         for (size_t j = 0; j < lib_dep->lib_segs_count; ++j)
         {
             lib_dep_seg = lib_dep->lib_segs[j];
@@ -1335,6 +1338,18 @@ stage_comp(struct Compartment* to_stage)
             memcpy(seg_map_target, (char*) lib_dep->data_base +
                     lib_dep_seg.offset, lib_dep_seg.file_sz);
         }
+
+        // `.tdata` for TLS
+        if (to_stage->libs[i]->tls_sec_size != 0)
+        {
+            assert(to_stage->libs[i]->tls_sec_addr != 0x0);
+            memcpy((char*) base_stage_addr + (uintptr_t)
+                    to_stage->libs_tls_sects->region_start + (uintptr_t)
+                    tls_allocd, (char*) lib_dep->data_base + (uintptr_t)
+                    to_stage->libs[i]->tls_sec_addr, lib_dep->tls_data_size);
+            tls_allocd += to_stage->libs[i]->tls_sec_size;
+        }
+
         munmap(lib_dep->data_base, lib_dep->data_size);
         lib_dep->data_base = NULL;
         lib_dep->data_size = 0;
@@ -1347,17 +1362,17 @@ stage_comp(struct Compartment* to_stage)
      * size for the `environ` array is already allocated
      */
 
-    void* environ_addr = (char*) base_stage_addr + (uintptr_t) to_stage->environ_ptr;
-    *(char**) environ_addr = (char*) environ_addr + 1;
+    void* environ_addr = (char*) to_stage->environ_ptr + (uintptr_t) base_stage_addr;
+    *((uintptr_t*) environ_addr) = sizeof(void*);
     environ_addr = (char*) environ_addr + 1;
 
     // Copy over prepared `environ` data from manager
     memcpy(environ_addr, to_stage->cc->env_ptr, to_stage->cc->env_ptr_sz);
-    for (unsigned short i = 0; i < to_stage->cc->env_ptr_count; ++i)
-    {
-        // Update entry offsets relative to compartment address
-        *((char**) environ_addr + i) += (uintptr_t) environ_addr;
-    }
+    /*for (unsigned short i = 0; i < to_stage->cc->env_ptr_count; ++i)*/
+    /*{*/
+        /*// Update entry offsets relative to compartment address*/
+        /**((char**) environ_addr + i) += (uintptr_t) environ_addr;*/
+    /*}*/
 
     to_stage->staged_addr = base_stage_addr;
 }
