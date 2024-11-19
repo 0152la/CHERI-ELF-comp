@@ -959,9 +959,12 @@ resolve_rela_syms(struct Compartment *new_comp)
             if (curr_rela_map->rela_sym_type == STT_TLS
                 && curr_rela_map->rela_sym_shndx != 0)
             {
-                curr_rela_map->target_func_address
-                    = (char *) curr_rela_map->target_func_address
-                    + prev_tls_secs_size;
+                *((void**) ((char*) new_comp->staged_addr + (uintptr_t)
+                            curr_rela_map->rela_address)) = (char*)
+                    curr_rela_map->target_func_address + prev_tls_secs_size;
+                /*curr_rela_map->target_func_address*/
+                    /*= (char *) curr_rela_map->target_func_address*/
+                    /*+ prev_tls_secs_size;*/
                 continue;
             }
 
