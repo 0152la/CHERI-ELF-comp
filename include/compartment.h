@@ -130,6 +130,7 @@ struct LibDependency
     // TLS-related variables
     // TODO can there be more TLS sections?
     void *tls_sec_addr;
+    ptrdiff_t tls_sec_off;
     size_t tls_sec_size;
     size_t tls_data_size;
     // offset from TLS base pointer (i.e., value of `tpidr_el0`) where this

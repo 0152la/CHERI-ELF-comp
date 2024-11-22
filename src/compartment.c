@@ -128,6 +128,7 @@ lib_init()
     new_lib->rela_maps = NULL;
 
     new_lib->tls_sec_addr = 0x0;
+    new_lib->tls_sec_off = 0;
     new_lib->tls_sec_size = 0;
     new_lib->tls_data_size = 0;
     new_lib->tls_offset = 0;
@@ -618,6 +619,7 @@ parse_lib_segs(Elf64_Ehdr *lib_ehdr, void* lib_data, struct LibDependency *lib_d
                 new_comp->libs_tls_sects = malloc(sizeof(struct TLSDesc));
             }
             lib_dep->tls_sec_addr = (void *) lib_phdr.p_vaddr;
+            lib_dep->tls_sec_off = lib_phdr.p_offset;
             lib_dep->tls_sec_size = lib_phdr.p_memsz;
         }
 
@@ -651,11 +653,11 @@ parse_lib_segs(Elf64_Ehdr *lib_ehdr, void* lib_data, struct LibDependency *lib_d
     lib_dep->lib_mem_base = align_up(
         (char *) new_comp->data_size + new_comp->page_size, new_comp->page_size);
     new_comp->data_size += lib_dep->lib_segs_size;
-    if (lib_dep->tls_sec_addr)
-    {
-        lib_dep->tls_sec_addr = (char *) lib_dep->tls_sec_addr
-            + (uintptr_t) lib_dep->lib_mem_base;
-    }
+    /*if (lib_dep->tls_sec_addr)*/
+    /*{*/
+        /*lib_dep->tls_sec_addr = (char *) lib_dep->tls_sec_addr*/
+            /*+ (uintptr_t) lib_dep->lib_mem_base;*/
+    /*}*/
 }
 
 static void
@@ -1130,9 +1132,7 @@ eval_staged_sym_offset(struct Compartment* comp, const comp_symbol* sym)
 static void *
 eval_staged_sym_tls_offset(struct Compartment *comp, const comp_symbol *sym)
 {
-    assert(comp->staged_addr != NULL);
-    return (char*) comp->staged_addr +
-        + (uintptr_t) sym->sym_ref->sym_offset
+    return (char*) sym->sym_ref->sym_offset
         + comp->libs[sym->sym_lib_idx]->tls_offset; // TODO check offset type
 }
 
@@ -1346,7 +1346,7 @@ stage_comp(struct Compartment* to_stage)
             memcpy((char*) base_stage_addr + (uintptr_t)
                     to_stage->libs_tls_sects->region_start + (uintptr_t)
                     tls_allocd, (char*) lib_dep->data_base + (uintptr_t)
-                    to_stage->libs[i]->tls_sec_addr, lib_dep->tls_data_size);
+                    to_stage->libs[i]->tls_sec_off, lib_dep->tls_sec_size);
             tls_allocd += to_stage->libs[i]->tls_sec_size;
         }
 
