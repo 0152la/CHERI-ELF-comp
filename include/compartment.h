@@ -75,9 +75,7 @@ extern void *__capability comp_return_caps[2];
 struct SegmentMap
 {
     void *mem_bot;
-    void *mem_top;
     size_t offset;
-    ptrdiff_t correction;
     size_t mem_sz;
     size_t file_sz;
     int prot_flags;
@@ -231,6 +229,8 @@ int64_t
 comp_exec(struct Compartment *, char *, void *, size_t);
 void
 comp_clean(struct Compartment *);
+void*
+get_seg_target(void*, struct LibDependency*, size_t);
 
 struct Compartment *
 find_comp(struct Compartment *);

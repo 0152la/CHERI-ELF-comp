@@ -183,19 +183,15 @@ mapping_new_fixed(struct Compartment* to_map, void* addr)
     // Set appropriate `mprotect` flags
     struct LibDependency *lib_dep;
     struct SegmentMap lib_dep_seg;
-    void* seg_map_target;
     for (size_t i = 0; i < to_map->libs_count; ++i)
     {
         lib_dep = to_map->libs[i];
         for (size_t j = 0; j < lib_dep->lib_segs_count; ++j)
         {
             lib_dep_seg = lib_dep->lib_segs[j];
-            seg_map_target = (char*) addr + (uintptr_t) lib_dep->lib_mem_base +
-                (uintptr_t) lib_dep_seg.mem_bot;
-            assert((uintptr_t) seg_map_target % to_map->page_size == 0);
-            if (mprotect(seg_map_target, lib_dep_seg.mem_sz, lib_dep_seg.prot_flags) != 0)
+            if (mprotect(get_seg_target(addr, lib_dep, j), lib_dep_seg.mem_sz, lib_dep_seg.prot_flags) != 0)
             {
-                err(1, "Error setting permissions for %p (lib %zu seg %zu)", seg_map_target, i, j);
+                err(1, "Error setting permissions for %p (lib %zu seg %zu)", get_seg_target(addr, lib_dep, j), i, j);
             }
         }
     }

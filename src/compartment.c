@@ -154,6 +154,7 @@ comp_from_elf(char *filename, struct CompConfig *cc)
     {
         struct LibDependency *parsed_lib
             = parse_lib_file(libs_to_parse[libs_parsed_count], new_comp);
+        print_lib_dep(parsed_lib);
 
         const unsigned short libs_to_search_count = libs_to_parse_count;
         for (size_t i = 0; i < parsed_lib->lib_dep_count; ++i)
@@ -629,14 +630,10 @@ parse_lib_segs(Elf64_Ehdr *lib_ehdr, void* lib_data, struct LibDependency *lib_d
         }
 
         struct SegmentMap *this_seg = malloc(sizeof(struct SegmentMap));
-        this_seg->mem_bot
-            = (void *) align_down(lib_phdr.p_vaddr, new_comp->page_size);
-        this_seg->correction
-            = (char *) lib_phdr.p_vaddr - (char *) this_seg->mem_bot;
-        this_seg->mem_top = (char *) lib_phdr.p_vaddr + lib_phdr.p_memsz;
-        this_seg->offset = align_down(lib_phdr.p_offset, new_comp->page_size);
-        this_seg->mem_sz = lib_phdr.p_memsz + this_seg->correction;
-        this_seg->file_sz = lib_phdr.p_filesz + this_seg->correction;
+        this_seg->mem_bot = (void*) lib_phdr.p_vaddr;
+        this_seg->offset = lib_phdr.p_offset;
+        this_seg->mem_sz = lib_phdr.p_memsz;
+        this_seg->file_sz = lib_phdr.p_filesz;
         this_seg->prot_flags = (lib_phdr.p_flags & PF_R ? PROT_READ : 0)
             | (lib_phdr.p_flags & PF_W ? PROT_WRITE : 0)
             | (lib_phdr.p_flags & PF_X ? PROT_EXEC : 0);
@@ -1120,6 +1117,13 @@ seek_lib_data(void* lib_data, off_t offset)
     return (void*) ((char*) lib_data + offset);
 }
 
+void*
+get_seg_target(void* base_addr, struct LibDependency* lib_dep, size_t seg_id)
+{
+    return (char*) base_addr + (uintptr_t) lib_dep->lib_mem_base +
+        (uintptr_t) lib_dep->lib_segs[seg_id].mem_bot;
+}
+
 static void*
 eval_staged_sym_offset(struct Compartment* comp, const comp_symbol* sym)
 {
@@ -1322,7 +1326,6 @@ stage_comp(struct Compartment* to_stage)
     // Copy over segment data and `.tdata`
     struct LibDependency *lib_dep;
     struct SegmentMap lib_dep_seg;
-    void* seg_map_target;
     size_t tls_allocd = 0x0;
     for (size_t i = 0; i < to_stage->libs_count; ++i)
     {
@@ -1332,10 +1335,7 @@ stage_comp(struct Compartment* to_stage)
         for (size_t j = 0; j < lib_dep->lib_segs_count; ++j)
         {
             lib_dep_seg = lib_dep->lib_segs[j];
-            seg_map_target = (char*) base_stage_addr + (uintptr_t) lib_dep->lib_mem_base +
-                (uintptr_t) lib_dep_seg.mem_bot;
-            assert((uintptr_t) seg_map_target % to_stage->page_size == 0);
-            memcpy(seg_map_target, (char*) lib_dep->data_base +
+            memcpy(get_seg_target(base_stage_addr, lib_dep, j), (char*) lib_dep->data_base +
                     lib_dep_seg.offset, lib_dep_seg.file_sz);
         }
 
@@ -1383,10 +1383,10 @@ stage_comp(struct Compartment* to_stage)
 static void
 print_lib_dep_seg(struct SegmentMap *lib_dep_seg)
 {
-    printf(">> bot %p // top %p // off 0x%zx // corr 0x%zx // msz 0x%zx // fsz "
+    printf(">> bot %p // off 0x%zx // msz 0x%zx // fsz "
            "0x%zx\n",
-        lib_dep_seg->mem_bot, lib_dep_seg->mem_top, lib_dep_seg->offset,
-        lib_dep_seg->correction, lib_dep_seg->mem_sz, lib_dep_seg->file_sz);
+        lib_dep_seg->mem_bot, lib_dep_seg->offset,
+        lib_dep_seg->mem_sz, lib_dep_seg->file_sz);
 }
 
 static void
