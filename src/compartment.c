@@ -967,8 +967,15 @@ resolve_rela_syms(struct Compartment *new_comp)
                 continue;
             }
 
-            if (curr_rela_map->target_func_address != 0
-                || curr_rela_map->rela_type == R_AARCH64_TLS_TPREL64)
+            if (curr_rela_map->rela_type == R_AARCH64_TLS_TPREL64)
+            {
+                *((void**) ((char*) new_comp->staged_addr + (uintptr_t)
+                            curr_rela_map->rela_address)) = (char*)
+                    curr_rela_map->target_func_address + prev_tls_secs_size;
+                continue;
+            }
+
+            if (curr_rela_map->target_func_address != 0)
             {
                 continue;
             }

@@ -212,7 +212,9 @@ mapping_new_fixed(struct Compartment* to_map, void* addr)
         for (size_t rela_idx = 0; rela_idx < to_map->libs[lib_idx]->rela_maps_count; ++rela_idx)
         {
             curr_rela_map = &to_map->libs[lib_idx]->rela_maps[rela_idx];
-            if (curr_rela_map->rela_sym_type == STT_TLS)
+            // TODO TLSDESC relocations? Can they have no symbol?
+            if (curr_rela_map->rela_sym_type == STT_TLS ||
+                    curr_rela_map->rela_type  == R_AARCH64_TLS_TPREL64)
                 /*&& curr_rela_map->target_func_address != 0x0)*/
             {
                 continue;
