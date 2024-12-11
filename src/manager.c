@@ -18,6 +18,11 @@ void *__capability manager_ddc = 0;
 
 const char *comp_config_suffix = ".comp";
 
+// Constants for compartment environment setup. We allocate space for a maximum
+// of 128 entries, with a maximum size of 128 bytes per entry. Numbers chosen
+// aribtrarily.
+//
+// TODO consider better values for `avg_sz_per_env_entry` and `max_env_count`
 char **proc_env_ptr = NULL;
 size_t proc_env_ptr_sz = 0;
 unsigned short proc_env_count = 0;
@@ -198,11 +203,13 @@ mapping_new_fixed(struct Compartment* to_map, void* addr)
 
     // Update `environ` pointers
     void* environ_addr = (char*) to_map->environ_ptr + (uintptr_t) addr;
+    *((char**) environ_addr) = (char*) environ_addr + (uintptr_t) *((char**) environ_addr);
+    environ_addr = (char*) environ_addr + sizeof(void*);
 
     // We update all `environ` entries, as well as the `environ` pointer itself
     for (unsigned short i = 0; i < to_map->cc->env_ptr_count + 1; ++i)
     {
-        *((char**) environ_addr + i) += (uintptr_t) addr;
+        *((char**) environ_addr + i) += (uintptr_t) environ_addr;
     }
 
     // Perform relocations
@@ -212,10 +219,8 @@ mapping_new_fixed(struct Compartment* to_map, void* addr)
         for (size_t rela_idx = 0; rela_idx < to_map->libs[lib_idx]->rela_maps_count; ++rela_idx)
         {
             curr_rela_map = &to_map->libs[lib_idx]->rela_maps[rela_idx];
-            // TODO TLSDESC relocations? Can they have no symbol?
-            if (curr_rela_map->rela_sym_type == STT_TLS ||
-                    curr_rela_map->rela_type  == R_AARCH64_TLS_TPREL64)
-                /*&& curr_rela_map->target_func_address != 0x0)*/
+
+            if (!curr_rela_map->mapping_reloc)
             {
                 continue;
             }

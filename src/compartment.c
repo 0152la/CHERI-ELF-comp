@@ -728,7 +728,7 @@ parse_lib_rela(Elf64_Shdr *rela_shdr, Elf64_Ehdr *lib_ehdr, void* lib_data,
     // Prepare TLS look-up function relocation (will be copied for each TLS
     // relocation entry
     static struct LibRelaMapping tls_lrm
-        = { NULL, 0x0, 0x0, -1, STT_FUNC, STB_GLOBAL, 0 };
+        = { NULL, 0x0, 0x0, -1, STT_FUNC, STB_GLOBAL, 0, true };
 
     // Log symbols that will need to be relocated eagerly at maptime
     Elf64_Rela curr_rela;
@@ -740,7 +740,7 @@ parse_lib_rela(Elf64_Shdr *rela_shdr, Elf64_Ehdr *lib_ehdr, void* lib_data,
         size_t curr_rela_type = ELF64_R_TYPE(curr_rela.r_info);
 
         struct LibRelaMapping lrm
-            = { NULL, 0x0, 0x0, curr_rela_type, -1, -1, 0 };
+            = { NULL, 0x0, 0x0, curr_rela_type, -1, -1, 0, true };
 
         // XXX We handle `TLS` symbols differently. It seems the way
         // AARCH64 handles TLS variables is preferentially via
@@ -809,9 +809,13 @@ parse_lib_rela(Elf64_Shdr *rela_shdr, Elf64_Ehdr *lib_ehdr, void* lib_data,
             // function relocation
             lrm.rela_address = curr_rela.r_offset
                 + (char *) lib_dep->lib_mem_base + sizeof(void *);
+
+            // Do not update address in mapping for TLS variables
+            lrm.mapping_reloc = false;
         }
         else if (curr_rela_type == R_AARCH64_TLS_TPREL64)
         {
+            lrm.mapping_reloc = false;
             lrm.target_func_address = (char *) curr_rela.r_addend;
             lrm.rela_address
                 = curr_rela.r_offset + (char *) lib_dep->lib_mem_base;
@@ -961,9 +965,6 @@ resolve_rela_syms(struct Compartment *new_comp)
                 *((void**) ((char*) new_comp->staged_addr + (uintptr_t)
                             curr_rela_map->rela_address)) = (char*)
                     curr_rela_map->target_func_address + prev_tls_secs_size;
-                /*curr_rela_map->target_func_address*/
-                    /*= (char *) curr_rela_map->target_func_address*/
-                    /*+ prev_tls_secs_size;*/
                 continue;
             }
 
@@ -1371,7 +1372,7 @@ stage_comp(struct Compartment* to_stage)
 
     void* environ_addr = (char*) to_stage->environ_ptr + (uintptr_t) base_stage_addr;
     *((uintptr_t*) environ_addr) = sizeof(void*);
-    environ_addr = (char*) environ_addr + 1;
+    environ_addr = (char*) environ_addr + sizeof(char*);
 
     // Copy over prepared `environ` data from manager
     memcpy(environ_addr, to_stage->cc->env_ptr, to_stage->cc->env_ptr_sz);

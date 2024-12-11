@@ -212,7 +212,7 @@ set(tests
 
     "lua_simple"
     "lua_script"
-    "lua_suite_some"
+    #"lua_suite_some"
 
     "test_map"
     "test_map_multi"

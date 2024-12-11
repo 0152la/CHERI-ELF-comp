@@ -95,6 +95,7 @@ struct LibRelaMapping
     unsigned short rela_sym_type; // type of underlying symbol
     unsigned short rela_sym_bind; // bind of underlying symbol
     uint16_t rela_sym_shndx; // section index of underlying symbol
+    bool mapping_reloc; // whether to relocate when mapped for execution
 };
 
 /**
