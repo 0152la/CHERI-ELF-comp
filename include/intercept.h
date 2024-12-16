@@ -57,7 +57,7 @@ intercept_wrapper();
 void
 setup_intercepts();
 
-//size_t
-//my_call_comp(size_t, char *, void *);
+// size_t
+// my_call_comp(size_t, char *, void *);
 
 #endif // _INTERCEPT_H

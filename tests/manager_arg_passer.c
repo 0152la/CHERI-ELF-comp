@@ -24,7 +24,7 @@ main(int argc, char **argv)
     char *file = argv[1];
 
     struct Compartment *arg_comp = register_new_comp(file, false);
-    struct CompMapping* arg_map = mapping_new(arg_comp);
+    struct CompMapping *arg_map = mapping_new(arg_comp);
 
     char *entry_func = argv[2];
     char **entry_func_args = &argv[3];

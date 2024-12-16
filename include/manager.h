@@ -56,23 +56,21 @@ clean_compartment_config(struct CompEntryPointDef *, size_t);
  * Compartment mappings
  ******************************************************************************/
 
-struct CompMapping*
-mapping_new(struct Compartment*);
-struct CompMapping*
-mapping_new_fixed(struct Compartment*, void*);
+struct CompMapping *
+mapping_new(struct Compartment *);
+struct CompMapping *
+mapping_new_fixed(struct Compartment *, void *);
 void
-mapping_free(struct CompMapping*);
+mapping_free(struct CompMapping *);
 int64_t
-mapping_exec(struct CompMapping*, char*, char**);
+mapping_exec(struct CompMapping *, char *, char **);
 
-struct
-CompMapping
+struct CompMapping
 {
     size_t id;
     void *__capability ddc;
-    void* map_addr;
-    struct Compartment* comp;
+    void *map_addr;
+    struct Compartment *comp;
 };
-
 
 #endif // _MANAGER_H

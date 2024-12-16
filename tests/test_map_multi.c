@@ -9,7 +9,7 @@ main()
 
     char *file = "./simple.so";
     struct Compartment *hw_comp = register_new_comp(file, true);
-    struct CompMapping* hw_map;
+    struct CompMapping *hw_map;
     for (size_t i = 0; i < 100; ++i)
     {
         hw_map = mapping_new(hw_comp);
@@ -19,4 +19,3 @@ main()
     comp_clean(hw_comp);
     return 0;
 }
-

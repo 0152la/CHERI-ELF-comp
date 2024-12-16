@@ -3,24 +3,86 @@
 
 #define __capability
 
-#include <stdint.h>
 #include <stdbool.h>
+#include <stdint.h>
 
 #define CHERI_COMP_LINUX
 typedef uintptr_t uintcap_t;
-uint64_t cheri_length_get(void* ptr) { return (uint64_t) ptr; }
-uint64_t cheri_address_get(void* ptr) { return (uint64_t) ptr; }
-uint64_t cheri_base_get(void* ptr) { return (uint64_t) ptr; }
-uint64_t cheri_flags_get(void* ptr) { return (uint64_t) ptr; }
-uint64_t cheri_perms_get(void* ptr) { return (uint64_t) ptr; }
-uint64_t cheri_type_get(void* ptr) { return (uint64_t) ptr; }
-bool cheri_tag_get(void* ptr) { return ptr == 0x0; }
-uint64_t cheri_offset_get(void* ptr) { return (uint64_t) ptr; }
-void* cheri_ddc_get() { return 0x0; }
 
-void* cheri_address_set(void* ptr, intptr_t addr) { void* _ptr = ptr; return (void*) addr; }
-void* cheri_bounds_set(void* ptr, intptr_t addr) { intptr_t _addr = addr; return ptr; }
-void* cheri_offset_set(void* ptr, intptr_t addr) { intptr_t _addr = addr; return ptr; }
+uint64_t
+cheri_length_get(void *ptr)
+{
+    return (uint64_t) ptr;
+}
+
+uint64_t
+cheri_address_get(void *ptr)
+{
+    return (uint64_t) ptr;
+}
+
+uint64_t
+cheri_base_get(void *ptr)
+{
+    return (uint64_t) ptr;
+}
+
+uint64_t
+cheri_flags_get(void *ptr)
+{
+    return (uint64_t) ptr;
+}
+
+uint64_t
+cheri_perms_get(void *ptr)
+{
+    return (uint64_t) ptr;
+}
+
+uint64_t
+cheri_type_get(void *ptr)
+{
+    return (uint64_t) ptr;
+}
+
+bool
+cheri_tag_get(void *ptr)
+{
+    return ptr == 0x0;
+}
+
+uint64_t
+cheri_offset_get(void *ptr)
+{
+    return (uint64_t) ptr;
+}
+
+void *
+cheri_ddc_get()
+{
+    return 0x0;
+}
+
+void *
+cheri_address_set(void *ptr, intptr_t addr)
+{
+    void *_ptr = ptr;
+    return (void *) addr;
+}
+
+void *
+cheri_bounds_set(void *ptr, intptr_t addr)
+{
+    intptr_t _addr = addr;
+    return ptr;
+}
+
+void *
+cheri_offset_set(void *ptr, intptr_t addr)
+{
+    intptr_t _addr = addr;
+    return ptr;
+}
 
 #include "../src/compartment.c"
 #include "../src/manager.c"
@@ -57,7 +119,7 @@ main(int argc, char **argv)
     struct Compartment *hw_comp = register_new_comp(file, true);
     hw_comp->id = 0;
 
-    struct CompMapping* hw_map = mapping_new(hw_comp);
+    struct CompMapping *hw_map = mapping_new(hw_comp);
     mapping_exec(hw_map, "main", NULL);
     mapping_free(hw_map);
     comp_clean(hw_comp);

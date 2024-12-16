@@ -12,7 +12,7 @@ main()
     char *file = "./simple.so";
     struct Compartment *hw_comp = register_new_comp(file, true);
     printf("REG DONE\n");
-    struct CompMapping* hw_map = mapping_new(hw_comp);
+    struct CompMapping *hw_map = mapping_new(hw_comp);
     printf("\tsz - %#zx\n", hw_comp->total_size);
     printf("NEW DONE\n");
     mapping_free(hw_map);

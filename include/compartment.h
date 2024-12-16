@@ -107,7 +107,7 @@ struct LibDependency
     char *lib_path;
     void *lib_mem_base; // relative address in compartment
 
-    void* data_base; // address of data mapped in loader
+    void *data_base; // address of data mapped in loader
     size_t data_size; // size of mapped data
 
     // Segments of interest (usually, of type `PT_LOAD`) within this library
@@ -171,7 +171,7 @@ struct CompConfig
     struct CompEntryPointDef *entry_points;
     size_t entry_point_count;
 
-    char** env_ptr;
+    char **env_ptr;
     size_t env_ptr_sz;
     unsigned short env_ptr_count;
 };
@@ -189,7 +189,8 @@ struct Compartment
     // ELF data
     size_t total_size; // size of compartment in memory
     size_t data_size; // size of data segments of ELF files
-    void* staged_addr; // address where compartment data is stored, ready for mapping
+    void *staged_addr; // address where compartment data is stored, ready for
+                       // mapping
 
     // Environ
     char **environ_ptr;
@@ -221,7 +222,7 @@ entry_point_cmp(const void *, const void *);
 struct Compartment *
 comp_from_elf(char *, struct CompConfig *); // char **, size_t, void *);
 void
-comp_map(struct Compartment *, void*);
+comp_map(struct Compartment *, void *);
 void
 comp_unmap(struct Compartment *);
 void
@@ -230,8 +231,8 @@ int64_t
 comp_exec(struct Compartment *, char *, void *, size_t);
 void
 comp_clean(struct Compartment *);
-void*
-get_seg_target(void*, struct LibDependency*, size_t);
+void *
+get_seg_target(void *, struct LibDependency *, size_t);
 
 struct Compartment *
 find_comp(struct Compartment *);
