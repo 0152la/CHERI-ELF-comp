@@ -204,10 +204,12 @@ mapping_new_fixed(struct Compartment* to_map, void* addr)
     // Update `environ` pointers
     void* environ_addr = (char*) to_map->environ_ptr + (uintptr_t) addr;
     *((char**) environ_addr) = (char*) environ_addr + (uintptr_t) *((char**) environ_addr);
+
+    // Update the `environ` pointer with the mapping address
     environ_addr = (char*) environ_addr + sizeof(void*);
 
-    // We update all `environ` entries, as well as the `environ` pointer itself
-    for (unsigned short i = 0; i < to_map->cc->env_ptr_count + 1; ++i)
+    // We update all `environ` entries
+    for (unsigned short i = 0; i < to_map->cc->env_ptr_count; ++i)
     {
         *((char**) environ_addr + i) += (uintptr_t) environ_addr;
     }
