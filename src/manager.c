@@ -161,7 +161,6 @@ register_new_comp(char *filename, bool allow_default_entry)
 struct CompMapping*
 mapping_new(struct Compartment* to_map)
 {
-    /*return mapping_new_fixed(to_map, get_next_comp_addr(to_map->total_size));*/
     return mapping_new_fixed(to_map, NULL);
 }
 
@@ -226,16 +225,8 @@ mapping_new_fixed(struct Compartment* to_map, void* addr)
             {
                 continue;
             }
-            /*printf("RN - %s\n", curr_rela_map->rela_name);*/
-            if (curr_rela_map->rela_name && !strcmp(curr_rela_map->rela_name, "environ"))
-            {
-                printf("RELA NAME %s ADDR %p TARGET %p\n", curr_rela_map->rela_name, curr_rela_map->rela_address, curr_rela_map->target_func_address);
-            }
             *(void**)((char*) curr_rela_map->rela_address + (uintptr_t) addr) = (char*)
                 curr_rela_map->target_func_address + (uintptr_t) addr;
-            /*memcpy((char*) curr_rela_map->rela_address + (uintptr_t) addr,*/
-                    /*&((char*) curr_rela_map->target_func_address + (uintptr_t) addr,*/
-                    /*sizeof(void*));*/
         }
     }
 
@@ -243,7 +234,6 @@ mapping_new_fixed(struct Compartment* to_map, void* addr)
     new_mapping->id = 0; // TODO
     new_mapping->comp = to_map;
     new_mapping->map_addr = addr;
-    /*new_mapping->environ_addr = (void*) ((intptr_t) environ_addr - (intptr_t) to_map->staged_addr + (intptr_t) addr);*/
     new_mapping->ddc = make_new_ddc(to_map, addr);
 
     return new_mapping;
@@ -280,8 +270,6 @@ comp_ptr_to_mapping_addr(void* comp_ptr, void* mapping_addr)
 int64_t
 mapping_exec(struct CompMapping* to_exec, char* fn_name, char** fn_args_arr)
 {
-    print_mapping_simple(to_exec);
-
     struct CompConfig* to_exec_cc = to_exec->comp->cc;
     struct CompEntryPointDef comp_entry
         = get_entry_point(fn_name, to_exec_cc);
@@ -320,22 +308,6 @@ mapping_exec(struct CompMapping* to_exec, char* fn_name, char** fn_args_arr)
     free(fn_args);
     return result;
 }
-
-/*int64_t*/
-/*exec_comp(struct Compartment *to_exec, char *entry_fn, char **entry_fn_args)*/
-/*{*/
-    /*struct CompEntryPointDef comp_entry*/
-        /*= get_entry_point(entry_fn, to_exec->cc);*/
-    /*void *comp_args = prepare_compartment_args(entry_fn_args, comp_entry);*/
-
-    /*struct Compartment *old_comp = loaded_comp;*/
-    /*loaded_comp = to_exec;*/
-    /*int64_t exec_res*/
-        /*= comp_exec(to_exec, entry_fn, comp_args, comp_entry.arg_count);*/
-    /*loaded_comp = old_comp;*/
-
-    /*return exec_res;*/
-/*}*/
 
 void
 clean_all_comps()

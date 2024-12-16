@@ -40,11 +40,7 @@ static void *
 eval_sym_offset(struct Compartment *, const comp_symbol *);
 static void *
 eval_lib_sym_offset(struct Compartment *, const size_t, const lib_symbol *);
-static void *
-eval_sym_tls_offset(struct Compartment *, const comp_symbol *);
 
-static ssize_t
-do_pread(int, void *, size_t, off_t);
 static void
 get_lib_data(void*, void*, size_t, off_t);
 static void*
@@ -154,7 +150,6 @@ comp_from_elf(char *filename, struct CompConfig *cc)
     {
         struct LibDependency *parsed_lib
             = parse_lib_file(libs_to_parse[libs_parsed_count], new_comp);
-        print_lib_dep(parsed_lib);
 
         const unsigned short libs_to_search_count = libs_to_parse_count;
         for (size_t i = 0; i < parsed_lib->lib_dep_count; ++i)
@@ -221,178 +216,6 @@ comp_from_elf(char *filename, struct CompConfig *cc)
     print_comp_simple(new_comp);
     return new_comp;
 }
-
-/* Map a struct Compartment into memory, making it ready for execution
- */
-/*void*/
-/*comp_map(struct Compartment *to_map, void* addr)*/
-/*{*/
-    /*struct SegmentMap *curr_seg;*/
-
-    /*// Map compartment library dependencies segments*/
-    /*struct LibDependency *lib_dep;*/
-    /*struct SegmentMap lib_dep_seg;*/
-    /*int lib_dep_fd;*/
-
-    /*void* map_result = mmap(addr, to_map->total_size,*/
-    /*[>void* map_result = mmap(to_map->base, (intptr_t) ((char*) to_map->mem_top - (char*) to_map->base),<]*/
-            /*PROT_READ | PROT_WRITE | PROT_EXEC, // TODO fix*/
-            /*MAP_PRIVATE | MAP_FIXED | MAP_ANONYMOUS, -1, 0);*/
-    /*if (map_result == MAP_FAILED)*/
-    /*{*/
-        /*err(1, "Error mapping compartment %zu data", to_map->id);*/
-    /*}*/
-
-    /*for (size_t i = 0; i < to_map->libs_count; ++i)*/
-    /*{*/
-        /*lib_dep = to_map->libs[i];*/
-        /*lib_dep_fd = open(lib_dep->lib_path, O_RDONLY);*/
-        /*for (size_t j = 0; j < lib_dep->lib_segs_count; ++j)*/
-        /*{*/
-            /*lib_dep_seg = lib_dep->lib_segs[j];*/
-            /*do_pread(lib_dep_fd,*/
-                     /*(char*) lib_dep->lib_mem_base*/
-                     /*+ (uintptr_t) lib_dep_seg.mem_bot,*/
-                     /*lib_dep_seg.file_sz, lib_dep_seg.offset);*/
-        /*}*/
-        /*close(lib_dep_fd);*/
-    /*}*/
-
-    /*// Map compartment scratch memory - heap, stack, sealed manager*/
-    /*// capabilities for transition out, capabilities to call other compartments*/
-    /*// (TODO fix this), TLS region (if applicable)*/
-    /*assert((intptr_t) to_map->scratch_mem_base % to_map->page_size == 0);*/
-    /*assert(to_map->scratch_mem_size % to_map->page_size == 0);*/
-    /*map_result*/
-        /*= mmap((void *) to_map->scratch_mem_base, to_map->scratch_mem_size,*/
-            /*PROT_READ | PROT_WRITE, // | PROT_EXEC, // TODO Fix this*/
-            /*MAP_PRIVATE | MAP_FIXED | MAP_ANONYMOUS, -1, 0);*/
-    /*if (map_result == MAP_FAILED)*/
-    /*{*/
-        /*err(1, "Error mapping compartment %zu scratch memory", to_map->id);*/
-    /*}*/
-
-    /* Copy over environ variables
-     *
-     * We need a pointer to an array of string pointers, so we synthetically
-     * create one. We don't expect this pointer to move, as the maximum allowed
-     * size for the `environ` array is already allocated
-     */
-    //*to_map->environ_ptr = (char *) (to_map->environ_ptr + 1);
-    /*to_map->environ_ptr += 1;*/
-
-    /*// Copy over prepared `environ` data from manager*/
-    /*memcpy(to_map->environ_ptr, to_map->cc->env_ptr, to_map->cc->env_ptr_sz);*/
-    /*for (unsigned short i = 0; i < to_map->cc->env_ptr_count; ++i)*/
-    /*{*/
-        /*// Update entry offsets relative to compartment address*/
-        /**(to_map->environ_ptr + i) += (uintptr_t) to_map->environ_ptr;*/
-    /*}*/
-
-    /*size_t tls_allocd = 0x0;*/
-    /*for (size_t i = 0; i < to_map->libs_count; ++i)*/
-    /*{*/
-        /*// Bind `.got.plt` entries*/
-        /*for (size_t j = 0; j < to_map->libs[i]->rela_maps_count; ++j)*/
-        /*{*/
-            /*assert(to_map->libs[i]->rela_maps[j].rela_address != 0);*/
-            /*if (to_map->libs[i]->rela_maps[j].target_func_address == 0)*/
-            /*{*/
-                /*continue;*/
-            /*}*/
-            /*memcpy(to_map->libs[i]->rela_maps[j].rela_address,*/
-                /*&to_map->libs[i]->rela_maps[j].target_func_address,*/
-                /*sizeof(void *));*/
-        /*}*/
-
-        /*// Map .tdata sections*/
-        /*if (to_map->libs[i]->tls_data_size != 0)*/
-        /*{*/
-            /*assert(to_map->libs[i]->tls_sec_addr);*/
-            /*memcpy((char *) to_map->libs_tls_sects->region_start + tls_allocd,*/
-                /*to_map->libs[i]->tls_sec_addr, to_map->libs[i]->tls_data_size);*/
-            /*tls_allocd += to_map->libs[i]->tls_sec_size;*/
-        /*}*/
-    /*}*/
-/*}*/
-
-/*void*/
-/*comp_unmap(struct Compartment* to_unmap)*/
-/*{*/
-    /*int res;*/
-
-    /*res = munmap(to_unmap->base, (intptr_t) ((char*) to_unmap->mem_top - (char*) to_unmap->base));*/
-    /*if (res == -1)*/
-    /*{*/
-        /*err(1, "Error unmapping compartment %zu data", to_unmap->id);*/
-    /*}*/
-
-    /*res*/
-        /*= munmap((void *) to_unmap->scratch_mem_base, to_unmap->scratch_mem_size);*/
-    /*if (res == -1)*/
-    /*{*/
-        /*err(1, "Error unmapping compartment %zu scratch memory", to_unmap->id);*/
-    /*}*/
-
-    /*to_unmap->mapped = false;*/
-/*}*/
-
-/* Execute a mapped compartment, by jumping to the appropriate entry point.
- *
- * The entry point is given as a function name in the `fn_name` argument, and
- * arguments to be passed are tightly packed in `args`. The requested entry
- * point must have been registered prior during compartment initialization, by
- * calling `parse_compartment_config`, and passing an appropriate `.comp`
- * config file.
- *
- * TODO casually ignore the situation where no compartment is passed, if we
- * prefer to default to `main` in that case
- */
-/*int64_t*/
-/*comp_exec(*/
-    /*struct Compartment *to_exec, char *fn_name, void *args, size_t args_count)*/
-/*{*/
-    /*void *fn = NULL;*/
-    /*for (size_t i = 0; i < to_exec->cc->entry_point_count; ++i)*/
-    /*{*/
-        /*if (!strcmp(fn_name, to_exec->cc->entry_points[i].name))*/
-        /*{*/
-            /*fn = (void *) to_exec->cc->entry_points[i].comp_addr;*/
-            /*break;*/
-        /*}*/
-    /*}*/
-    /*if (!fn)*/
-    /*{*/
-        /*errx(1, "Did not find entry point `%s`!\n", fn_name);*/
-    /*}*/
-    /*void *wrap_sp;*/
-
-    /*// TODO check if we need anything from here*/
-    /*// https://git.morello-project.org/morello/kernel/linux/-/wikis/Morello-pure-capability-kernel-user-Linux-ABI-specification*/
-
-    /*int64_t result;*/
-
-    /*// TODO handle register clobbering stuff (`syscall-restrict` example)*/
-    /*// https://github.com/capablevms/cheri_compartments/blob/master/code/signal_break.c#L46*/
-    /*assert(args_count <= 3);*/
-    /*// TODO attempt to lifting pointers to capabilities before passing to*/
-    /*// compartments. Might be needed when handling pointers.*/
-    /*[>void * __capability * args_caps;<]*/
-    /*[>for (size_t i = 0; i < args_count; ++i)<]*/
-    /*[>{<]*/
-    /*[>void* __capability arg = (__cheri_tocap void* __capability) args[i];<]*/
-    /*[>arg = cheri_perms_and(arg, !(CHERI_PERM_STORE | CHERI_PERM_EXECUTE));<]*/
-    /*[>args_caps[i] = arg;<]*/
-    /*[>}<]*/
-    /*// TODO*/
-    /*// * set TPIDR_EL0 to TLS start, if given*/
-    /*// * make `tls_lookup_stub` get the index*/
-    /*// * fix statics?*/
-    /*result = comp_exec_in(to_exec->scratch_mem_stack_top, to_exec->ddc, fn,*/
-        /*args, args_count, sealed_redirect_cap,*/
-        /*to_exec->libs_tls_sects->region_start);*/
-    /*return result;*/
-/*}*/
 
 void
 comp_clean(struct Compartment *to_clean)
@@ -650,11 +473,6 @@ parse_lib_segs(Elf64_Ehdr *lib_ehdr, void* lib_data, struct LibDependency *lib_d
     lib_dep->lib_mem_base = align_up(
         (char *) new_comp->data_size + new_comp->page_size, new_comp->page_size);
     new_comp->data_size += lib_dep->lib_segs_size;
-    /*if (lib_dep->tls_sec_addr)*/
-    /*{*/
-        /*lib_dep->tls_sec_addr = (char *) lib_dep->tls_sec_addr*/
-            /*+ (uintptr_t) lib_dep->lib_mem_base;*/
-    /*}*/
 }
 
 static void
@@ -1076,9 +894,6 @@ resolve_rela_syms(struct Compartment *new_comp)
             else
             {
                 curr_rela_map->target_func_address = eval_staged_sym_offset(new_comp, chosen_sym);
-                /*memcpy((char*) new_comp->staged_addr + (uintptr_t)*/
-                        /*curr_rela_map->rela_address, &rela_target,*/
-                        /*sizeof(void*));*/
             }
         }
         prev_tls_secs_size += new_comp->libs[i]->tls_sec_size;
@@ -1101,17 +916,6 @@ find_tls_lookup_func(struct Compartment *comp)
 /*******************************************************************************
  * Helper functions
  ******************************************************************************/
-
-static ssize_t
-do_pread(int fd, void *buf, size_t count, off_t offset)
-{
-    ssize_t res = pread(fd, buf, count, offset);
-    if (res == -1)
-    {
-        err(1, "Error in pread");
-    }
-    return res;
-}
 
 static void
 get_lib_data(void* buf, void* lib_file_addr, size_t data_sz, off_t offset)
@@ -1161,13 +965,6 @@ eval_lib_sym_offset(
 {
     return (char *) comp->libs[lib_idx]->lib_mem_base
         + (uintptr_t) sym->sym_offset;
-}
-
-static void *
-eval_sym_tls_offset(struct Compartment *comp, const comp_symbol *sym)
-{
-    return (char *) sym->sym_ref->sym_offset
-        + comp->libs[sym->sym_lib_idx]->tls_offset;
 }
 
 // TODO relocate all `NOTYPE` symbols to same symbol - cache?
@@ -1376,11 +1173,6 @@ stage_comp(struct Compartment* to_stage)
 
     // Copy over prepared `environ` data from manager
     memcpy(environ_addr, to_stage->cc->env_ptr, to_stage->cc->env_ptr_sz);
-    /*for (unsigned short i = 0; i < to_stage->cc->env_ptr_count; ++i)*/
-    /*{*/
-        /*// Update entry offsets relative to compartment address*/
-        /**((char**) environ_addr + i) += (uintptr_t) environ_addr;*/
-    /*}*/
 
     to_stage->staged_addr = base_stage_addr;
 }

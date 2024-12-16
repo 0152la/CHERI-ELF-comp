@@ -71,7 +71,6 @@ CompMapping
     size_t id;
     void *__capability ddc;
     void* map_addr;
-    void* environ_addr;
     struct Compartment* comp;
 };
 
