@@ -181,20 +181,20 @@ comp_from_elf(char *filename, struct CompConfig *cc)
     new_comp->total_size += align_up(
         new_comp->data_size + new_comp->page_size, new_comp->page_size);
 
-    init_comp_scratch_mem(new_comp);
-    setup_environ(new_comp);
-    map_comp_entry_points(new_comp);
-    resolve_comp_tls_regions(new_comp);
+    BENCH(init_comp_scratch_mem(new_comp), "scratch");
+    BENCH(setup_environ(new_comp), "environ");
+    BENCH(map_comp_entry_points(new_comp), "eps");
+    BENCH(resolve_comp_tls_regions(new_comp), "tls");
 
     // Update total compartment size, by adding additional scratch + extra
     // (TLS, environ) memory needs
     new_comp->total_size += new_comp->scratch_mem_size;
 
     // All data collected; map compartment to a staging area ...
-    stage_comp(new_comp);
+    BENCH(stage_comp(new_comp), "stage");
 
     // ... and perform relocations
-    resolve_rela_syms(new_comp);
+    BENCH(resolve_rela_syms(new_comp), "relas");
 
     // Compartment size sanity check
     assert(new_comp->total_size
