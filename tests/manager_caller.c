@@ -15,7 +15,7 @@ main(int argc, char **argv)
 
     struct Compartment *hw_comp;
     BENCH(hw_comp = register_new_comp(file, true), "register");
-    comp_map(hw_comp);
+    BENCH(comp_map(hw_comp), "map");
     int comp_result;
     BENCH(comp_result = exec_comp(hw_comp, "main", NULL), "exec");
     comp_clean(hw_comp);
