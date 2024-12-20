@@ -150,6 +150,7 @@ register_new_comp(char *filename, bool allow_default_entry)
     new_cc->env_ptr_count = proc_env_count;
 
     struct Compartment *new_comp = comp_from_elf(filename, new_cc);
+    print_comp(new_comp);
     new_comp->id = comps_count;
 
     comps_count += 1;
@@ -168,6 +169,8 @@ mapping_new(struct Compartment *to_map)
 struct CompMapping *
 mapping_new_fixed(struct Compartment *to_map, void *addr)
 {
+    size_t b_mmap = bench_init("mmap");
+    bench_start(b_mmap);
     int mmap_flags = MAP_PRIVATE | MAP_ANONYMOUS;
     if (addr != NULL)
     {
@@ -183,10 +186,17 @@ mapping_new_fixed(struct Compartment *to_map, void *addr)
             addr);
     }
     addr = map_result;
+    bench_end(b_mmap);
 
-    memcpy(addr, to_map->staged_addr, to_map->total_size);
+    size_t sz = to_map->data_size + to_map->page_size + to_map->environ_sz + to_map->page_size + to_map->total_tls_size;
+    printf("SZ %zu\n", to_map->data_size);
+    printf("SZ %zu\n", to_map->total_size);
+    printf("SZ %zu\n", sz);
+    BENCH(memcpy(addr, to_map->staged_addr, sz), "memcpy");
 
     // Set appropriate `mprotect` flags
+    size_t b_mprot = bench_init("mprotect");
+    bench_start(b_mprot);
     struct LibDependency *lib_dep;
     struct SegmentMap lib_dep_seg;
     for (size_t i = 0; i < to_map->libs_count; ++i)
@@ -204,8 +214,11 @@ mapping_new_fixed(struct Compartment *to_map, void *addr)
             }
         }
     }
+    bench_end(b_mprot);
 
     // Update `environ` pointers
+    size_t b_env = bench_init("environ_map");
+    bench_start(b_env);
     void *environ_addr = (char *) to_map->environ_ptr + (uintptr_t) addr;
     *((char **) environ_addr)
         = (char *) environ_addr + (uintptr_t) * ((char **) environ_addr);
@@ -218,8 +231,11 @@ mapping_new_fixed(struct Compartment *to_map, void *addr)
     {
         *((char **) environ_addr + i) += (uintptr_t) environ_addr;
     }
+    bench_end(b_env);
 
     // Perform relocations
+    size_t b_rel = bench_init("relas_map");
+    bench_start(b_rel);
     struct LibRelaMapping *curr_rela_map;
     for (size_t lib_idx = 0; lib_idx < to_map->libs_count; ++lib_idx)
     {
@@ -237,6 +253,7 @@ mapping_new_fixed(struct Compartment *to_map, void *addr)
                 + (uintptr_t) addr;
         }
     }
+    bench_end(b_rel);
 
     struct CompMapping *new_mapping = malloc(sizeof(struct CompMapping));
     new_mapping->id = 0; // TODO
