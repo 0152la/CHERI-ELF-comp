@@ -84,7 +84,7 @@ struct SegmentMap
 /* Struct representing an eager relocation to be made at map-time - instead of
  * lazily looking up function addresses once a function is called at runtime,
  * via PLT/GOT, we update the expected addresses eagerly once the code is
- * mapped into memory, via `comp_map`
+ * mapped into memory
  */
 struct LibRelaMapping
 {
@@ -178,6 +178,9 @@ struct CompConfig
     unsigned short env_ptr_count; // number of entries
 };
 
+#include "compartment_data.h"
+#include "compartment_exec.h"
+
 /**
  * Struct representing ELF data necessary to load and eventually execute a
  * compartment
@@ -187,6 +190,7 @@ struct Compartment
     // Identifiers, manager by `manager.c`
     size_t id;
     struct CompConfig *cc;
+
     // Execution info
     // ELF data
     size_t total_size; // size of compartment in memory
@@ -224,11 +228,7 @@ entry_point_cmp(const void *, const void *);
 struct Compartment *
 comp_from_elf(char *, struct CompConfig *); // char **, size_t, void *);
 void
-comp_map(struct Compartment *, void *);
-void
 comp_unmap(struct Compartment *);
-void
-comp_map_full(struct Compartment *);
 int64_t
 comp_exec(struct Compartment *, char *, void *, size_t);
 void
