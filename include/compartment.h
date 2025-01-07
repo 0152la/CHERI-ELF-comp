@@ -228,10 +228,6 @@ entry_point_cmp(const void *, const void *);
 struct Compartment *
 comp_from_elf(char *, struct CompConfig *); // char **, size_t, void *);
 void
-comp_unmap(struct Compartment *);
-int64_t
-comp_exec(struct Compartment *, char *, void *, size_t);
-void
 comp_clean(struct Compartment *);
 void *
 get_seg_target(void *, struct LibDependency *, size_t);
