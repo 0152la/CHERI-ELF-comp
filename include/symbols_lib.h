@@ -1,7 +1,7 @@
 #ifndef _CHERICOMP_SYMBOLS_LIB_H
 #define _CHERICOMP_SYMBOLS_LIB_H
 
-#include "symbols.h"
+#include "symbols_common.h"
 
 typedef tommy_hashtable lib_symbol_list;
 typedef struct LibDependencySymbol lib_symbol;

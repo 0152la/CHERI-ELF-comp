@@ -1,7 +1,7 @@
 #ifndef _CHERICOMP_SYMBOLS_COMP_H
 #define _CHERICOMP_SYMBOLS_COMP_H
 
-#include "symbols.h"
+#include "symbols_common.h"
 #include "symbols_lib.h"
 
 typedef tommy_hashtable comp_symbol_list;
