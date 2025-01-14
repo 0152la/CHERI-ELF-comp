@@ -42,6 +42,10 @@ struct ExecCompartment
 
     // Symbols contained within all libraries of this executable compartment
     comp_symbol_list *comp_syms;
+
+    // TLS
+    struct TLSDesc* libs_tls_sects;
+    size_t total_tls_size;
 };
 
 //struct ExecCompartment*

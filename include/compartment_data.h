@@ -13,15 +13,15 @@
  */
 struct DataCompartment
 {
-    struct ExecCompartment* exec_comp;
+    struct ExecCompartment* ec;
     size_t data_size;
 
     size_t stack_size;
     size_t heap_size;
 
     // TLS
-    struct TLSDesc* libs_tls_sects;
-    size_t total_tls_size;
+    //struct TLSDesc* libs_tls_sects;
+    //size_t total_tls_size;
 
     size_t page_size;
 };
