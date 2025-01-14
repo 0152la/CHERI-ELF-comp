@@ -21,8 +21,6 @@ make_data_comp(struct ExecCompartment* ec, struct CompConfig* cc)
     new_dc->heap_size = cc->heap_size;
     new_dc->page_size = cc->page_size;
 
-    setup_environ(new_dc, cc);
-
     if (ec->has_tls)
     {
         setup_tls_regions(new_dc, ec);
@@ -36,16 +34,10 @@ make_data_comp(struct ExecCompartment* ec, struct CompConfig* cc)
  ******************************************************************************/
 
 size_t
-get_dc_environ_offset(struct DataCompartment* dc)
+get_dc_tls_offset(struct DataCompartment* dc)
 {
     struct DataCompartment* omit = dc;
     return 0x0;
-}
-
-size_t
-get_dc_tls_offset(struct DataCompartment* dc)
-{
-    return dc->environ_size;
 }
 
 size_t
@@ -64,14 +56,14 @@ get_dc_heap_offset(struct DataCompartment* dc)
  * Helper functions
  ******************************************************************************/
 
-static void
-setup_environ(struct DataCompartment *new_dc, struct CompConfig* cc)
-{
-    assert(cc->env_ptr != NULL); // TODO consider optional check
-    new_dc->environ_size
-        = align_up(cc->env_ptr_sz, new_dc->page_size);
-    adjust_dc_size(new_dc, new_dc->environ_size);
-}
+/*static void*/
+/*setup_environ(struct DataCompartment *new_dc, struct CompConfig* cc)*/
+/*{*/
+    /*assert(cc->env_ptr != NULL); // TODO consider optional check*/
+    /*new_dc->environ_size*/
+        /*= align_up(cc->env_ptr_sz, new_dc->page_size);*/
+    /*adjust_dc_size(new_dc, new_dc->environ_size);*/
+/*}*/
 
 static void
 setup_tls_regions(struct DataCompartment* new_dc, struct ExecCompartment* ec)

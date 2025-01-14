@@ -159,29 +159,37 @@ make_exec_comp_from_comp(struct Compartment* c)
     new_ec->exec_size = c->data_size;
     new_ec->page_size = c->page_size;
     new_ec->staged_addr = c->staged_addr;
+
     new_ec->libs_count = c->libs_count;
     new_ec->libs = c->libs;
+
     new_ec->has_tls = (c->libs_tls_sects != NULL);
+
+    new_ec->environ_ptr = c->environ_ptr;
+    new_ec->environ_size = c->environ_sz;
+    new_ec->env_ptr_count = c->cc->env_ptr_count;
+
     new_ec->tls_lookup_func = c->tls_lookup_func;
+
     new_ec->comp_syms = c->comp_syms;
 
     return new_ec;
 }
 
 struct DataCompartment*
-make_data_comp_from_comp(struct Compartment* c)
+make_data_comp_from_comp(struct Compartment* c, struct ExecCompartment* ec)
 {
     struct DataCompartment* new_dc = malloc(sizeof(struct DataCompartment));
 
+    new_dc->exec_comp = ec;
     new_dc->data_size = c->scratch_mem_size;
+
     new_dc->stack_size = c->cc->stack_size;
     new_dc->heap_size = c->cc->heap_size;
-    new_dc->page_size = c->cc->page_size;
-    new_dc->environ_ptr = c->environ_ptr;
-    new_dc->environ_size = c->environ_sz;
-    new_dc->env_ptr_count = c->cc->env_ptr_count;
+
     new_dc->libs_tls_sects = c->libs_tls_sects;
     new_dc->total_tls_size = c->total_tls_size;
+
     new_dc->page_size = c->page_size;
 
     return new_dc;
@@ -206,7 +214,7 @@ register_new_comp(char *filename, bool allow_default_entry)
 
     struct ExecCompartment* ec = make_exec_comp_from_comp(new_comp);
     /*struct DataCompartment* dc = make_data_comp(ec, new_cc);*/
-    struct DataCompartment* dc = make_data_comp_from_comp(new_comp);
+    struct DataCompartment* dc = make_data_comp_from_comp(new_comp, ec);
     /*struct DataCompartment* dc = make_data_comp2(new_comp);*/
     new_comp->ec = ec;
     new_comp->dc = dc;
@@ -331,19 +339,7 @@ mapping_new_data_fixed(struct DataCompartment* to_map_data, void* addr)
     struct DataMapping* new_dm = malloc(sizeof(struct DataMapping));
     new_dm->dc = to_map_data;
 
-    // Update `environ` pointers
-    void *environ_addr = (char *) to_map_data->environ_ptr + (uintptr_t) addr;
-    *((char **) environ_addr)
-        = (char *) environ_addr + (uintptr_t) * ((char **) environ_addr);
-
-    // Update the `environ` pointer with the mapping address
-    environ_addr = (char *) environ_addr + sizeof(void *);
-
-    // We update all `environ` entries
-    for (unsigned short i = 0; i < to_map_data->env_ptr_count; ++i)
-    {
-        *((char **) environ_addr + i) += (uintptr_t) environ_addr;
-    }
+    void* addr2 = addr; // TODO
 
     return new_dm;
 }

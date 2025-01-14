@@ -19,11 +19,6 @@ struct DataCompartment
     size_t stack_size;
     size_t heap_size;
 
-    // Environ
-    char** environ_ptr;
-    size_t environ_size;
-    unsigned short env_ptr_count;
-
     // TLS
     struct TLSDesc* libs_tls_sects;
     size_t total_tls_size;
@@ -34,7 +29,6 @@ struct DataCompartment
 struct DataCompartment*
 make_data_comp(struct ExecCompartment*, struct CompConfig*);
 
-size_t get_dc_environ_offset(struct DataCompartment*);
 size_t get_dc_tls_offset(struct DataCompartment*);
 size_t get_dc_stack_offset(struct DataCompartment*);
 size_t get_dc_heap_offset(struct DataCompartment*);

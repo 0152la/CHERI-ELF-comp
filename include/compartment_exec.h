@@ -24,6 +24,19 @@ struct ExecCompartment
 
     bool has_tls;
 
+    // Environ
+    // XXX ideally, the environ pointer would be part of the data compartment.
+    // However, since the address of the environ pointer is encoded in the
+    // executable instructions themselves, we can't then share the same
+    // executable compartment with multiple data compartments, as each
+    // executable would need to access a different environ region. Since the
+    // address is encoded in the instructions, this cannot be changed
+    // dynamically. So, for simplicity, we keep the environ area within the
+    // executable compartments
+    char** environ_ptr;
+    size_t environ_size;
+    unsigned short env_ptr_count;
+
     // Address of function used to perform lookup of TLS variables
     void* tls_lookup_func;
 
