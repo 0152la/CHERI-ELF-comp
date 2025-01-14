@@ -217,6 +217,7 @@ comp_from_elf(char *filename, struct CompConfig *cc)
         == new_comp->scratch_mem_extra);
 
     print_comp_simple(new_comp);
+
     return new_comp;
 }
 

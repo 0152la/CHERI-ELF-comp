@@ -18,7 +18,7 @@
 #include <unistd.h>
 
 // TODO consider re-organizing
-#include "symbols_comp.h"
+#include "symbols.h"
 
 #ifdef __CHERI__
 #include "cheriintrin.h"
@@ -31,8 +31,7 @@
 #include <stddef.h>
 #endif
 
-#define align_down(x, align) __builtin_align_down(x, align)
-#define align_up(x, align) __builtin_align_up(x, align)
+#include "compartment_common.h"
 
 // TODO once things stabilize, recheck if all struct members are required
 // currently there's quite a bit of redundancy to make things easier to think
@@ -98,58 +97,6 @@ struct LibRelaMapping
     bool mapping_reloc; // whether to relocate when mapped for execution
 };
 
-/**
- * Struct representing a library dependency for one of our given compartments
- */
-struct LibDependency
-{
-    char *lib_name;
-    char *lib_path;
-    void *lib_mem_base; // relative address in compartment
-
-    void *data_base; // address of data mapped in loader
-    size_t data_size; // size of mapped data
-
-    // Segments of interest (usually, of type `PT_LOAD`) within this library
-    size_t lib_segs_count;
-    size_t lib_segs_size;
-    struct SegmentMap *lib_segs;
-
-    // Symbols within this library
-    lib_symbol_list *lib_syms;
-
-    // Library dependencies for this library
-    unsigned short lib_dep_count;
-    char **lib_dep_names;
-
-    // Symbols within this library that need eager relocation
-    size_t rela_maps_count;
-    struct LibRelaMapping *rela_maps;
-
-    // TLS-related variables
-    // TODO can there be more TLS sections?
-    void *tls_sec_addr;
-    size_t tls_sec_off;
-    size_t tls_sec_size;
-    size_t tls_data_size;
-    // offset from TLS base pointer (i.e., value of `tpidr_el0`) where this
-    // library's TLS variables start
-    size_t tls_offset;
-};
-
-/**
- * Struct representing TLS information for a compartment. Since we currently
- * enforce only single-threaded code, we basically only have pointers for
- * regions allocated for TLS for each dynamic shared object
- */
-struct TLSDesc
-{
-    unsigned short region_count;
-    size_t region_size;
-    void *region_start;
-    unsigned short libs_count;
-};
-
 /* Struct representing configuration data for one entry point; this is just
  * information that we expect to appear in the compartment, as given by its
  * compartment configuration file
@@ -162,24 +109,8 @@ struct CompEntryPointDef
     void *comp_addr;
 };
 
-/* Struct representing a compartment configuration.
- */
-struct CompConfig
-{
-    size_t heap_size;
-    size_t stack_size;
-    struct CompEntryPointDef *entry_points;
-    size_t entry_point_count;
-
-    // Variables related to `manager.h` prepared `environ` data
-    char **env_ptr; // pointer to `environ` array
-    size_t env_ptr_sz; // size of the array
-                       // TODO might be unneeded
-    unsigned short env_ptr_count; // number of entries
-};
-
-#include "compartment_data.h"
 #include "compartment_exec.h"
+#include "compartment_data.h"
 
 /**
  * Struct representing ELF data necessary to load and eventually execute a
@@ -187,6 +118,9 @@ struct CompConfig
  */
 struct Compartment
 {
+    struct ExecCompartment* ec;
+    struct DataCompartment* dc;
+
     // Identifiers, manager by `manager.c`
     size_t id;
     struct CompConfig *cc;

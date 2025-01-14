@@ -38,6 +38,7 @@ extern char **environ;
 
 static void *get_next_comp_addr(size_t);
 static void *__capability make_new_ddc(struct Compartment *, void *);
+static void *__capability make_new_ddc_dc(struct DataCompartment *, void *);
 
 static struct CompConfig *
 parse_compartment_config_file(char *, bool);
@@ -135,6 +136,57 @@ static void *__capability make_new_ddc(
     return new_ddc;
 }
 
+static void *__capability make_new_ddc_dc(
+    struct DataCompartment *dc, void *target_addr)
+{
+    void *__capability new_ddc
+        = cheri_address_set(cheri_ddc_get(), (intptr_t) target_addr);
+    new_ddc = cheri_bounds_set(new_ddc, dc->data_size);
+    new_ddc
+        = cheri_offset_set(new_ddc, (uintptr_t) get_dc_heap_offset(dc));
+    return new_ddc;
+}
+
+/*******************************************************************************
+ * Main functions
+ ******************************************************************************/
+
+struct ExecCompartment*
+make_exec_comp_from_comp(struct Compartment* c)
+{
+    struct ExecCompartment* new_ec = malloc(sizeof(struct ExecCompartment));
+
+    new_ec->exec_size = c->data_size;
+    new_ec->page_size = c->page_size;
+    new_ec->staged_addr = c->staged_addr;
+    new_ec->libs_count = c->libs_count;
+    new_ec->libs = c->libs;
+    new_ec->has_tls = (c->libs_tls_sects != NULL);
+    new_ec->tls_lookup_func = c->tls_lookup_func;
+    new_ec->comp_syms = c->comp_syms;
+
+    return new_ec;
+}
+
+struct DataCompartment*
+make_data_comp_from_comp(struct Compartment* c)
+{
+    struct DataCompartment* new_dc = malloc(sizeof(struct DataCompartment));
+
+    new_dc->data_size = c->scratch_mem_size;
+    new_dc->stack_size = c->cc->stack_size;
+    new_dc->heap_size = c->cc->heap_size;
+    new_dc->page_size = c->cc->page_size;
+    new_dc->environ_ptr = c->environ_ptr;
+    new_dc->environ_size = c->environ_sz;
+    new_dc->env_ptr_count = c->cc->env_ptr_count;
+    new_dc->libs_tls_sects = c->libs_tls_sects;
+    new_dc->total_tls_size = c->total_tls_size;
+    new_dc->page_size = c->page_size;
+
+    return new_dc;
+}
+
 struct Compartment *
 register_new_comp(char *filename, bool allow_default_entry)
 {
@@ -152,6 +204,13 @@ register_new_comp(char *filename, bool allow_default_entry)
     struct Compartment *new_comp = comp_from_elf(filename, new_cc);
     new_comp->id = comps_count;
 
+    struct ExecCompartment* ec = make_exec_comp_from_comp(new_comp);
+    /*struct DataCompartment* dc = make_data_comp(ec, new_cc);*/
+    struct DataCompartment* dc = make_data_comp_from_comp(new_comp);
+    /*struct DataCompartment* dc = make_data_comp2(new_comp);*/
+    new_comp->ec = ec;
+    new_comp->dc = dc;
+
     comps_count += 1;
     comps = realloc(comps, comps_count * sizeof(struct Compartment *));
     comps[comps_count - 1] = new_comp;
@@ -168,43 +227,11 @@ mapping_new(struct Compartment *to_map)
 struct CompMapping *
 mapping_new_fixed(struct Compartment *to_map, void *addr)
 {
-    int mmap_flags = MAP_PRIVATE | MAP_ANONYMOUS;
-    if (addr != NULL)
-    {
-        assert((uintptr_t) addr % to_map->page_size == 0);
-        mmap_flags |= MAP_FIXED;
-    }
-    // Map new compartment
-    void *map_result = mmap(addr, to_map->total_size,
-        PROT_READ | PROT_WRITE | PROT_EXEC, mmap_flags, -1, 0);
-    if (map_result == MAP_FAILED)
-    {
-        err(1, "Error mapping compartment %zu data at addr %p", to_map->id,
-            addr);
-    }
-    addr = map_result;
 
-    memcpy(addr, to_map->staged_addr, to_map->total_size);
+    struct ExecMapping* new_em = mapping_new_exec_fixed(to_map->ec, addr, to_map->total_size); // TODO remove total_size
+    /*struct DataMapping* new_dm = mapping_new_data_fixed(to_map->dc, new_em->map_addr);*/
 
-    // Set appropriate `mprotect` flags
-    struct LibDependency *lib_dep;
-    struct SegmentMap lib_dep_seg;
-    for (size_t i = 0; i < to_map->libs_count; ++i)
-    {
-        lib_dep = to_map->libs[i];
-        for (size_t j = 0; j < lib_dep->lib_segs_count; ++j)
-        {
-            lib_dep_seg = lib_dep->lib_segs[j];
-            if (mprotect(get_seg_target(addr, lib_dep, j), lib_dep_seg.mem_sz,
-                    lib_dep_seg.prot_flags)
-                != 0)
-            {
-                err(1, "Error setting permissions for %p (lib %zu seg %zu)",
-                    get_seg_target(addr, lib_dep, j), i, j);
-            }
-        }
-    }
-
+    addr = new_em->map_addr;
     // Update `environ` pointers
     void *environ_addr = (char *) to_map->environ_ptr + (uintptr_t) addr;
     *((char **) environ_addr)
@@ -219,32 +246,106 @@ mapping_new_fixed(struct Compartment *to_map, void *addr)
         *((char **) environ_addr + i) += (uintptr_t) environ_addr;
     }
 
+    struct CompMapping *new_mapping = malloc(sizeof(struct CompMapping));
+    new_mapping->id = 0; // TODO
+    new_mapping->comp = to_map;
+    new_mapping->em = new_em;
+    /*new_mapping->dm = new_dm;*/
+    new_mapping->map_addr = new_em->map_addr; // TODO
+    new_mapping->ddc = make_new_ddc(to_map, addr);
+    /*new_mapping->ddc = make_new_ddc_dc(to_map->dc, addr);*/
+
+    return new_mapping;
+}
+
+struct ExecMapping*
+mapping_new_exec_fixed(struct ExecCompartment* to_map_exec, void* addr, size_t sz)
+{
+    struct ExecMapping* new_em = malloc(sizeof(struct ExecMapping));
+    int mmap_flags = MAP_PRIVATE | MAP_ANONYMOUS;
+    if (addr != NULL)
+    {
+        assert((uintptr_t) addr % to_map_exec->page_size == 0);
+        mmap_flags |= MAP_FIXED;
+    }
+
+    void *map_result = mmap(addr, sz, PROT_READ | PROT_WRITE | PROT_EXEC,
+            mmap_flags, -1, 0);
+    if (map_result == MAP_FAILED)
+    {
+        err(1, "Error mapping exec compartment at addr %p", addr);
+    }
+    new_em->map_addr = map_result;
+    new_em->ec = to_map_exec;
+
+    /*// Make a copy of the staged executable code*/
+    /*memcpy(new_em->map_addr, to_map_exec->staged_addr, to_map_exec->exec_size);*/
+    memcpy(new_em->map_addr, to_map_exec->staged_addr, sz);
+
+    // Set appropriate `mprotect` flags
+    struct LibDependency *lib_dep;
+    struct SegmentMap lib_dep_seg;
+    for (size_t i = 0; i < to_map_exec->libs_count; ++i)
+    {
+        lib_dep = to_map_exec->libs[i];
+        for (size_t j = 0; j < lib_dep->lib_segs_count; ++j)
+        {
+            lib_dep_seg = lib_dep->lib_segs[j];
+            if (mprotect(get_seg_target(new_em->map_addr, lib_dep, j), lib_dep_seg.mem_sz,
+                    lib_dep_seg.prot_flags)
+                != 0)
+            {
+                err(1, "Error setting permissions for %p (lib %zu seg %zu)",
+                    get_seg_target(new_em->map_addr, lib_dep, j), i, j);
+            }
+        }
+    }
+    //
     // Perform relocations
     struct LibRelaMapping *curr_rela_map;
-    for (size_t lib_idx = 0; lib_idx < to_map->libs_count; ++lib_idx)
+    for (size_t lib_idx = 0; lib_idx < to_map_exec->libs_count; ++lib_idx)
     {
         for (size_t rela_idx = 0;
-             rela_idx < to_map->libs[lib_idx]->rela_maps_count; ++rela_idx)
+             rela_idx < to_map_exec->libs[lib_idx]->rela_maps_count; ++rela_idx)
         {
-            curr_rela_map = &to_map->libs[lib_idx]->rela_maps[rela_idx];
+            curr_rela_map = &to_map_exec->libs[lib_idx]->rela_maps[rela_idx];
 
             if (!curr_rela_map->mapping_reloc)
             {
                 continue;
             }
-            *(void **) ((char *) curr_rela_map->rela_address + (uintptr_t) addr)
+            *(void **) ((char *) curr_rela_map->rela_address + (uintptr_t) new_em->map_addr)
                 = (char *) curr_rela_map->target_func_address
-                + (uintptr_t) addr;
+                + (uintptr_t) new_em->map_addr;
         }
     }
 
-    struct CompMapping *new_mapping = malloc(sizeof(struct CompMapping));
-    new_mapping->id = 0; // TODO
-    new_mapping->comp = to_map;
-    new_mapping->map_addr = addr;
-    new_mapping->ddc = make_new_ddc(to_map, addr);
+    // TODO generate PCC capability
 
-    return new_mapping;
+    return new_em;
+}
+
+struct DataMapping*
+mapping_new_data_fixed(struct DataCompartment* to_map_data, void* addr)
+{
+    struct DataMapping* new_dm = malloc(sizeof(struct DataMapping));
+    new_dm->dc = to_map_data;
+
+    // Update `environ` pointers
+    void *environ_addr = (char *) to_map_data->environ_ptr + (uintptr_t) addr;
+    *((char **) environ_addr)
+        = (char *) environ_addr + (uintptr_t) * ((char **) environ_addr);
+
+    // Update the `environ` pointer with the mapping address
+    environ_addr = (char *) environ_addr + sizeof(void *);
+
+    // We update all `environ` entries
+    for (unsigned short i = 0; i < to_map_data->env_ptr_count; ++i)
+    {
+        *((char **) environ_addr + i) += (uintptr_t) environ_addr;
+    }
+
+    return new_dm;
 }
 
 void
@@ -576,6 +677,10 @@ make_default_comp_config()
     cc->entry_point_count = 1;
     return cc;
 }
+
+/*******************************************************************************
+ * Printing functions
+ ******************************************************************************/
 
 static void
 print_comp(struct Compartment *to_print)

@@ -60,10 +60,29 @@ struct CompMapping *
 mapping_new(struct Compartment *);
 struct CompMapping *
 mapping_new_fixed(struct Compartment *, void *);
+struct ExecMapping*
+mapping_new_exec_fixed(struct ExecCompartment*, void*, size_t);
+struct DataMapping*
+mapping_new_data_fixed(struct DataCompartment*, void*);
 void
 mapping_free(struct CompMapping *);
 int64_t
 mapping_exec(struct CompMapping *, char *, char **);
+
+struct DataMapping
+{
+    struct DataCompartment* dc;
+    void* map_addr;
+    void* __capability ddc;
+};
+
+struct ExecMapping
+{
+    struct ExecCompartment* ec;
+    void* map_addr;
+    void* __capability pcc; // TODO unused, only for future execution
+                            // compartmentalisation
+};
 
 struct CompMapping
 {
@@ -71,6 +90,9 @@ struct CompMapping
     void *__capability ddc;
     void *map_addr;
     struct Compartment *comp;
+
+    struct DataMapping* dm;
+    struct ExecMapping* em;
 };
 
 #endif // _MANAGER_H

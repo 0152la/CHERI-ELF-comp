@@ -1,6 +1,8 @@
 # Compartment management library
 add_library(chcomp STATIC
     compartment.c
+    compartment_exec.c
+    compartment_data.c
     intercept.c
     manager.c
     symbols_comp.c
