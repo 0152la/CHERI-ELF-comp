@@ -39,6 +39,9 @@ extern char **environ;
 static void *get_next_comp_addr(size_t);
 static void *__capability make_new_ddc(struct Compartment *, void *);
 
+void* __memcpy_aarch64(void*, const void*, size_t);
+void* __memcpy_aarch64_simd(void*, const void*, size_t);
+
 static struct CompConfig *
 parse_compartment_config_file(char *, bool);
 static void
@@ -150,7 +153,6 @@ register_new_comp(char *filename, bool allow_default_entry)
     new_cc->env_ptr_count = proc_env_count;
 
     struct Compartment *new_comp = comp_from_elf(filename, new_cc);
-    print_comp(new_comp);
     new_comp->id = comps_count;
 
     comps_count += 1;
@@ -164,6 +166,12 @@ struct CompMapping *
 mapping_new(struct Compartment *to_map)
 {
     return mapping_new_fixed(to_map, NULL);
+}
+
+void
+my_mem(void* dst, void* src, size_t sz)
+{
+    __memcpy_aarch64_simd(dst, src, sz);
 }
 
 struct CompMapping *
@@ -192,7 +200,7 @@ mapping_new_fixed(struct Compartment *to_map, void *addr)
     printf("SZ %zu\n", to_map->data_size);
     printf("SZ %zu\n", to_map->total_size);
     printf("SZ %zu\n", sz);
-    BENCH(memcpy(addr, to_map->staged_addr, sz), "memcpy");
+    BENCH(my_mem(addr, to_map->staged_addr, sz), "memcpy");
 
     // Set appropriate `mprotect` flags
     size_t b_mprot = bench_init("mprotect");
