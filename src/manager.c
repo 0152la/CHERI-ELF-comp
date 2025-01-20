@@ -171,7 +171,12 @@ mapping_new(struct Compartment *to_map)
 void
 my_mem(void* dst, void* src, size_t sz)
 {
-    __memcpy_aarch64_simd(dst, src, sz);
+    char* d = (char*) dst;
+    char* s = (char*) src;
+    for (size_t i = 0; i < sz; ++i)
+    {
+        *(d++) = *(s++);
+    }
 }
 
 struct CompMapping *

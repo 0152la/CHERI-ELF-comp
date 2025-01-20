@@ -661,10 +661,10 @@ parse_lib_rela(Elf64_Shdr *rela_shdr, Elf64_Ehdr *lib_ehdr, void *lib_data,
                 // TODO at least right now
                 if (!strcmp(&dyn_str_tbl[curr_rela_sym.st_name], "__progname"))
                 {
-                    warnx("Currently not relocating symbol `__progname` from "
-                          "library %s "
-                          "- using within a container might cause a crash.",
-                        lib_dep->lib_name);
+                    /*warnx("Currently not relocating symbol `__progname` from "*/
+                          /*"library %s "*/
+                          /*"- using within a container might cause a crash.",*/
+                        /*lib_dep->lib_name);*/
                     continue;
                 }
 
@@ -836,12 +836,12 @@ resolve_rela_syms(struct Compartment *new_comp)
                         && strncmp(new_comp->libs[i]->lib_name, lib_to_suppress,
                             strlen(lib_to_suppress)))
                     {
-                        warnx("Did not find WEAK symbol %s of type %hu (idx "
-                              "%zu in library %s (idx %zu)) - execution "
-                              "*might* fault.",
-                            curr_rela_map->rela_name,
-                            curr_rela_map->rela_sym_type, j,
-                            new_comp->libs[i]->lib_name, i);
+                        /*warnx("Did not find WEAK symbol %s of type %hu (idx "*/
+                              /*"%zu in library %s (idx %zu)) - execution "*/
+                              /*"*might* fault.",*/
+                            /*curr_rela_map->rela_name,*/
+                            /*curr_rela_map->rela_sym_type, j,*/
+                            /*new_comp->libs[i]->lib_name, i);*/
                     }
                     free(candidate_syms);
                     continue;
