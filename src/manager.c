@@ -202,9 +202,6 @@ mapping_new_fixed(struct Compartment *to_map, void *addr)
     bench_end(b_mmap);
 
     size_t sz = to_map->data_size + to_map->page_size + to_map->environ_sz + to_map->page_size + to_map->total_tls_size;
-    printf("SZ %zu\n", to_map->data_size);
-    printf("SZ %zu\n", to_map->total_size);
-    printf("SZ %zu\n", sz);
     BENCH(my_mem(addr, to_map->staged_addr, sz), "memcpy");
 
     // Set appropriate `mprotect` flags

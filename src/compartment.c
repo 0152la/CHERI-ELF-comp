@@ -151,7 +151,6 @@ comp_from_elf(char *filename, struct CompConfig *cc)
     while (libs_parsed_count != libs_to_parse_count)
     {
         struct LibDependency *parsed_lib;
-        printf("---- %s\n", libs_to_parse[libs_parsed_count]);
         BENCH(parsed_lib = parse_lib_file(libs_to_parse[libs_parsed_count], new_comp), "parsed_lib");
 
         const unsigned short libs_to_search_count = libs_to_parse_count;
