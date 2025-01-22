@@ -132,13 +132,14 @@ update_comp_syms(comp_symbol_list *comp_syms, lib_symbol_list *lib_syms,
     tommy_array_init(&to_update);
     tommy_hashtable_foreach_arg(lib_syms, gather_defined_sym, &to_update);
     lib_symbol *curr_sym;
-    comp_symbol *new_cs_all = calloc(tommy_array_size(&to_update), sizeof(comp_symbol));
+    comp_symbols *new_cs;
     for (size_t i = 0; i < tommy_array_size(&to_update); ++i)
     {
         curr_sym = (lib_symbol *) tommy_array_get(&to_update, i);
-        new_cs_all[i].sym_ref = curr_sym;
-        new_cs_all[i].sym_lib_idx = lib_idx;
-        comp_syms_insert(&new_cs_all[i], comp_syms);
+        new_cs = malloc(sizeof(comp_symbol));
+        new_cs->sym_ref = curr_sym;
+        new_cs->sym_lib_idx = lib_idx;
+        comp_syms_insert(new_cs, comp_syms);
     }
     tommy_array_done(&to_update);
 }
