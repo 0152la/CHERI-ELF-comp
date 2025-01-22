@@ -348,7 +348,7 @@ parse_lib_file(char *lib_name, struct Compartment *new_comp)
         strcpy(new_lib->lib_path, lib_name);
     }
 
-    parse_lib_segs(&lib_ehdr, lib_data, new_lib, new_comp);
+    BENCH(parse_lib_segs(&lib_ehdr, lib_data, new_lib, new_comp), "parsed_lib-segs");
 
     // Load `.shstr` section, so we can check section names
     Elf64_Shdr shstrtab_hdr;
@@ -387,23 +387,23 @@ parse_lib_file(char *lib_name, struct Compartment *new_comp)
 
         if (curr_shdr.sh_type == SHT_SYMTAB || curr_shdr.sh_type == SHT_DYNSYM)
         {
-            parse_lib_symtb(&curr_shdr, &lib_ehdr, lib_data, new_lib);
+            BENCH(parse_lib_symtb(&curr_shdr, &lib_ehdr, lib_data, new_lib), "parsed_lib-symtb");
         }
         // Lookup `.rela.plt` to eagerly load relocatable function addresses
         else if (curr_shdr.sh_type == SHT_RELA
             && !strcmp(&shstrtab[curr_shdr.sh_name], ".rela.plt"))
         {
-            parse_lib_rela(&curr_shdr, &lib_ehdr, lib_data, new_lib);
+            BENCH(parse_lib_rela(&curr_shdr, &lib_ehdr, lib_data, new_lib), "parsed_lib-rela_plt");
         }
         else if (curr_shdr.sh_type == SHT_RELA
             && !strcmp(&shstrtab[curr_shdr.sh_name], ".rela.dyn"))
         {
-            parse_lib_rela(&curr_shdr, &lib_ehdr, lib_data, new_lib);
+            BENCH(parse_lib_rela(&curr_shdr, &lib_ehdr, lib_data, new_lib), "parsed_lib-rela_dyn");
         }
         // Lookup `.dynamic` to find library dependencies
         else if (curr_shdr.sh_type == SHT_DYNAMIC)
         {
-            parse_lib_dynamic_deps(&curr_shdr, &lib_ehdr, lib_data, new_lib);
+            BENCH(parse_lib_dynamic_deps(&curr_shdr, &lib_ehdr, lib_data, new_lib), "parsed_lib-dynamic");
         }
         // Section containing TLS static data
         else if (curr_shdr.sh_type == SHT_PROGBITS
@@ -420,8 +420,8 @@ parse_lib_file(char *lib_name, struct Compartment *new_comp)
     new_comp->libs[new_comp->libs_count - 1] = new_lib;
     if (new_lib->lib_syms)
     {
-        update_comp_syms(
-            new_comp->comp_syms, new_lib->lib_syms, new_comp->libs_count - 1);
+        BENCH(update_comp_syms(
+            new_comp->comp_syms, new_lib->lib_syms, new_comp->libs_count - 1), "parsed_lib-update_syms");
     }
 
     return new_lib;

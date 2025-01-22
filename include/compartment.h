@@ -67,8 +67,8 @@ extern void *__capability comp_return_caps[2];
 #endif
 
 // Default sizes for compartment heap and stack, if not explicitly given
-#define DEFAULT_COMP_HEAP_SZ 0x800000UL // 800kB
-#define DEFAULT_COMP_STACK_SZ 0x80000UL // 80kB
+#define DEFAULT_COMP_HEAP_SZ 800 * 1024 // 800kB
+#define DEFAULT_COMP_STACK_SZ 80 * 1024 // 80kB
 
 /* Struct representing one segment of an ELF binary.
  *

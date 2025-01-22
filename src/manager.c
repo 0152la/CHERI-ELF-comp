@@ -168,7 +168,7 @@ mapping_new(struct Compartment *to_map)
     return mapping_new_fixed(to_map, NULL);
 }
 
-void
+static void
 my_mem(void* dst, void* src, size_t sz)
 {
     char* d = (char*) dst;
@@ -179,6 +179,7 @@ my_mem(void* dst, void* src, size_t sz)
     }
 }
 
+void *cpt = NULL;
 struct CompMapping *
 mapping_new_fixed(struct Compartment *to_map, void *addr)
 {
@@ -191,40 +192,46 @@ mapping_new_fixed(struct Compartment *to_map, void *addr)
         mmap_flags |= MAP_FIXED;
     }
     // Map new compartment
-    void *map_result = mmap(addr, to_map->total_size,
-        PROT_READ | PROT_WRITE | PROT_EXEC, mmap_flags, -1, 0);
-    if (map_result == MAP_FAILED)
+    void *map_result = cpt;
+    if (!map_result)
     {
-        err(1, "Error mapping compartment %zu data at addr %p", to_map->id,
-            addr);
+        map_result = mmap(addr, to_map->total_size,
+            PROT_READ | PROT_WRITE | PROT_EXEC, mmap_flags, -1, 0);
+        if (map_result == MAP_FAILED)
+        {
+            err(1, "Error mapping compartment %zu data at addr %p", to_map->id,
+                addr);
+        }
+        cpt = map_result;
     }
     addr = map_result;
     bench_end(b_mmap);
 
     size_t sz = to_map->data_size + to_map->page_size + to_map->environ_sz + to_map->page_size + to_map->total_tls_size;
+
     BENCH(my_mem(addr, to_map->staged_addr, sz), "memcpy");
 
     // Set appropriate `mprotect` flags
-    size_t b_mprot = bench_init("mprotect");
-    bench_start(b_mprot);
-    struct LibDependency *lib_dep;
-    struct SegmentMap lib_dep_seg;
-    for (size_t i = 0; i < to_map->libs_count; ++i)
-    {
-        lib_dep = to_map->libs[i];
-        for (size_t j = 0; j < lib_dep->lib_segs_count; ++j)
-        {
-            lib_dep_seg = lib_dep->lib_segs[j];
-            if (mprotect(get_seg_target(addr, lib_dep, j), lib_dep_seg.mem_sz,
-                    lib_dep_seg.prot_flags)
-                != 0)
-            {
-                err(1, "Error setting permissions for %p (lib %zu seg %zu)",
-                    get_seg_target(addr, lib_dep, j), i, j);
-            }
-        }
-    }
-    bench_end(b_mprot);
+    /*size_t b_mprot = bench_init("mprotect");*/
+    /*bench_start(b_mprot);*/
+    /*struct LibDependency *lib_dep;*/
+    /*struct SegmentMap lib_dep_seg;*/
+    /*for (size_t i = 0; i < to_map->libs_count; ++i)*/
+    /*{*/
+        /*lib_dep = to_map->libs[i];*/
+        /*for (size_t j = 0; j < lib_dep->lib_segs_count; ++j)*/
+        /*{*/
+            /*lib_dep_seg = lib_dep->lib_segs[j];*/
+            /*if (mprotect(get_seg_target(addr, lib_dep, j), lib_dep_seg.mem_sz,*/
+                    /*lib_dep_seg.prot_flags)*/
+                /*!= 0)*/
+            /*{*/
+                /*err(1, "Error setting permissions for %p (lib %zu seg %zu)",*/
+                    /*get_seg_target(addr, lib_dep, j), i, j);*/
+            /*}*/
+        /*}*/
+    /*}*/
+    /*bench_end(b_mprot);*/
 
     // Update `environ` pointers
     size_t b_env = bench_init("environ_map");
@@ -279,7 +286,7 @@ mapping_free(struct CompMapping *to_unmap)
 {
     int res;
 
-    res = munmap(to_unmap->map_addr, to_unmap->comp->total_size);
+    /*res = munmap(to_unmap->map_addr, to_unmap->comp->total_size);*/
     if (res == -1)
     {
         err(1, "Error unmapping compartment %zu data at addr %p", to_unmap->id,

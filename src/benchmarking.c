@@ -49,7 +49,7 @@ bench_end(size_t id)
     assert(benchs[id]->res_start != -1);
     assert(res_end != -1);
     benchs[id]->diff = timespec_diff(&benchs[id]->end, &benchs[id]->start);
-    /*bench_report_one_id(id);*/
+    bench_report_one_id(id);
 }
 
 
