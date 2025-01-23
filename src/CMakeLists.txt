@@ -10,7 +10,7 @@ add_library(chcomp STATIC
     memcpy-advsimd.S
     )
 target_include_directories(chcomp PRIVATE ${INCLUDE_DIR} ${TOML_INCLUDE_DIR} ${TOMMYDS_DIR})
-target_link_libraries(chcomp PRIVATE tomllib tommydslib compbench)
+target_link_libraries(chcomp PRIVATE tomllib tommydslib compbench pthread)
 
 add_library(computils SHARED
     comp_utils.c)

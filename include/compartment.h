@@ -16,6 +16,7 @@
 #include <sys/mman.h>
 #include <sys/stat.h>
 #include <unistd.h>
+#include <pthread.h>
 
 // TODO consider re-organizing
 #include "symbols_comp.h"
@@ -220,6 +221,8 @@ struct Compartment
     size_t page_size;
 };
 
+void memcpy_simple(void*, void*, size_t);
+void memcpy_large(void*, void*, size_t);
 int
 entry_point_cmp(const void *, const void *);
 struct Compartment *

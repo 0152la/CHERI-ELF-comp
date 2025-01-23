@@ -39,9 +39,6 @@ extern char **environ;
 static void *get_next_comp_addr(size_t);
 static void *__capability make_new_ddc(struct Compartment *, void *);
 
-void* __memcpy_aarch64(void*, const void*, size_t);
-void* __memcpy_aarch64_simd(void*, const void*, size_t);
-
 static struct CompConfig *
 parse_compartment_config_file(char *, bool);
 static void
@@ -168,17 +165,6 @@ mapping_new(struct Compartment *to_map)
     return mapping_new_fixed(to_map, NULL);
 }
 
-static void
-my_mem(void* dst, void* src, size_t sz)
-{
-    char* d = (char*) dst;
-    char* s = (char*) src;
-    for (size_t i = 0; i < sz; ++i)
-    {
-        *(d++) = *(s++);
-    }
-}
-
 void *cpt = NULL;
 struct CompMapping *
 mapping_new_fixed(struct Compartment *to_map, void *addr)
@@ -209,7 +195,7 @@ mapping_new_fixed(struct Compartment *to_map, void *addr)
 
     size_t sz = to_map->data_size + to_map->page_size + to_map->environ_sz + to_map->page_size + to_map->total_tls_size;
 
-    BENCH(my_mem(addr, to_map->staged_addr, sz), "memcpy");
+    BENCH(memcpy_large(addr, to_map->staged_addr, sz), "memcpy");
 
     // Set appropriate `mprotect` flags
     /*size_t b_mprot = bench_init("mprotect");*/

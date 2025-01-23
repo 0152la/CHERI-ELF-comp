@@ -926,6 +926,66 @@ find_tls_lookup_func(struct Compartment *comp)
  * Helper functions
  ******************************************************************************/
 
+struct thr_info
+{
+    void* dst;
+    void* src;
+    size_t sz;
+    pthread_barrier_t* b;
+};
+
+void
+memcpy_simple(void* dst, void* src, size_t sz)
+{
+    char* d = (char*) dst;
+    char* s = (char*) src;
+    for (size_t i = 0; i < sz; ++i)
+    {
+        *(d++) = *(s++);
+    }
+}
+
+static void*
+one_memcpy(void* ti_raw)
+{
+    struct thr_info* ti = (struct thr_info*) ti_raw;
+    memcpy_simple(ti->dst, ti->src, ti->sz);
+    pthread_barrier_wait(ti->b);
+    return 0;
+}
+
+void
+memcpy_large(void* dst, void* src, size_t sz)
+{
+    const unsigned short count = 4;
+    assert(sz % count == 0);
+    pthread_barrier_t barrier;
+    pthread_barrier_init(&barrier, NULL, count);
+    pthread_t* thrs = calloc(count, sizeof(pthread_t));
+    struct thr_info* tis = calloc(count, sizeof(struct thr_info));
+    int res;
+    for (size_t i = 0; i < count; ++i)
+    {
+        tis[i].dst = (void*) ((uintptr_t) dst + sz / count * i);
+        tis[i].src = (void*) ((uintptr_t) src + sz / count * i);
+        tis[i].sz = sz / count;
+        tis[i].b = &barrier;
+        res = pthread_create(&thrs[i], NULL, &one_memcpy, &tis[i]);
+        if (res != 0)
+        {
+            errx(1, "Thread %zu failed create: %d", i, res);
+        }
+
+    }
+    if (pthread_join(thrs[0], NULL) != 0)
+    {
+        errx(1, "Error in executing `memcpy` threads.");
+    }
+    free(thrs);
+    free(tis);
+    pthread_barrier_destroy(&barrier);
+}
+
 static void
 get_lib_data(void *buf, void *lib_file_addr, size_t data_sz, off_t offset)
 {
@@ -1129,14 +1189,19 @@ resolve_comp_tls_regions(struct Compartment *new_comp)
 static void
 stage_comp(struct Compartment *to_stage)
 {
+    size_t b_mmap = bench_init("stage-mmap");
+    bench_start(b_mmap);
     void *base_stage_addr = mmap(NULL, to_stage->total_size,
         PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
     if (base_stage_addr == MAP_FAILED)
     {
         err(1, "Error staging compartment %zu", to_stage->id);
     }
+    bench_end(b_mmap);
 
     // Copy over segment data and `.tdata`
+    size_t b_mcpy = bench_init("stage-memcpy");
+    bench_start(b_mcpy);
     struct LibDependency *lib_dep;
     struct SegmentMap lib_dep_seg;
     size_t tls_allocd = 0x0;
@@ -1148,7 +1213,7 @@ stage_comp(struct Compartment *to_stage)
         for (size_t j = 0; j < lib_dep->lib_segs_count; ++j)
         {
             lib_dep_seg = lib_dep->lib_segs[j];
-            memcpy(get_seg_target(base_stage_addr, lib_dep, j),
+            memcpy_simple(get_seg_target(base_stage_addr, lib_dep, j),
                 (char *) lib_dep->data_base + lib_dep_seg.offset,
                 lib_dep_seg.file_sz);
         }
@@ -1157,7 +1222,7 @@ stage_comp(struct Compartment *to_stage)
         if (to_stage->libs[i]->tls_sec_size != 0)
         {
             assert(to_stage->libs[i]->tls_sec_addr != 0x0);
-            memcpy((char *) base_stage_addr
+            memcpy_simple((char *) base_stage_addr
                     + (uintptr_t) to_stage->libs_tls_sects->region_start
                     + (uintptr_t) tls_allocd,
                 (char *) lib_dep->data_base
@@ -1170,6 +1235,7 @@ stage_comp(struct Compartment *to_stage)
         lib_dep->data_base = NULL;
         lib_dep->data_size = 0;
     }
+    bench_end(b_mcpy);
 
     /* Copy over environ variables
      *
@@ -1178,6 +1244,8 @@ stage_comp(struct Compartment *to_stage)
      * size for the `environ` array is already allocated
      */
 
+    size_t b_env = bench_init("stage-environ");
+    bench_start(b_env);
     void *environ_addr
         = (char *) to_stage->environ_ptr + (uintptr_t) base_stage_addr;
     *((uintptr_t *) environ_addr) = sizeof(void *);
@@ -1185,6 +1253,7 @@ stage_comp(struct Compartment *to_stage)
 
     // Copy over prepared `environ` data from manager
     memcpy(environ_addr, to_stage->cc->env_ptr, to_stage->cc->env_ptr_sz);
+    bench_end(b_env);
 
     to_stage->staged_addr = base_stage_addr;
 }
