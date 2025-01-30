@@ -59,7 +59,7 @@ comp_syms_clean(comp_symbol_list *list)
 void
 comp_syms_clean_deep(comp_symbol_list *list)
 {
-    tommy_hashtable_foreach(list, comp_syms_clean_one_entry);
+    /*tommy_hashtable_foreach(list, comp_syms_clean_one_entry);*/
     comp_syms_clean(list);
 }
 
@@ -125,7 +125,7 @@ gather_defined_sym(void *arg, void *sym)
     }
 }
 
-void
+comp_symbol*
 update_comp_syms(comp_symbol_list *comp_syms, lib_symbol_list *lib_syms,
     const size_t lib_idx)
 {
@@ -142,4 +142,5 @@ update_comp_syms(comp_symbol_list *comp_syms, lib_symbol_list *lib_syms,
         comp_syms_insert(&new_cs_all[i], comp_syms);
     }
     tommy_array_done(&to_update);
+    return new_cs_all;
 }

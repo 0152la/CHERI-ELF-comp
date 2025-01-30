@@ -6,6 +6,9 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+/* Redefine CHERI stuff
+ *****************************************************************************/
+
 #define CHERI_COMP_LINUX
 typedef uintptr_t uintcap_t;
 
@@ -86,6 +89,7 @@ cheri_offset_set(void *ptr, intptr_t addr)
 
 #include "../src/compartment.c"
 #include "../src/manager.c"
+#include "../src/benchmarking.c"
 
 extern char **environ;
 char **proc_env_ptr;
@@ -119,9 +123,14 @@ main(int argc, char **argv)
     struct Compartment *hw_comp = register_new_comp(file, true);
     hw_comp->id = 0;
 
-    struct CompMapping *hw_map = mapping_new(hw_comp);
-    mapping_exec(hw_map, "main", NULL);
-    mapping_free(hw_map);
+    struct CompMapping *hw_map;
+    const unsigned int run_count = 1000;
+    for (size_t i = 0; i < run_count; ++i)
+    {
+        hw_map = mapping_new(hw_comp);
+        mapping_exec(hw_map, "main", NULL);
+        mapping_free(hw_map);
+    }
     comp_clean(hw_comp);
     return 0;
 }

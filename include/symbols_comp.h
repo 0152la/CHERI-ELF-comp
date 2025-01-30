@@ -32,7 +32,7 @@ comp_syms_find_all(const char *, comp_symbol_list *);
 void
 comp_syms_print(comp_symbol_list *);
 
-void
+comp_symbol *
 update_comp_syms(comp_symbol_list *, lib_symbol_list *, const size_t);
 
 #endif // _CHERICOMP_SYMBOLS_COMP_H

@@ -56,6 +56,11 @@ prepare_compartment_environ();
 static void *
 prepare_compartment_args(char **args, struct CompEntryPointDef);
 
+static void
+mapping_update_environ(struct CompMapping*);
+static void
+mapping_update_relas(struct CompMapping*);
+
 static void *
 comp_ptr_to_mapping_addr(void *, void *);
 
@@ -165,10 +170,36 @@ mapping_new(struct Compartment *to_map)
     return mapping_new_fixed(to_map, NULL);
 }
 
-void *cpt = NULL;
+struct CompMapping* cpt = NULL;
 struct CompMapping *
 mapping_new_fixed(struct Compartment *to_map, void *addr)
 {
+    if (cpt && cpt->comp != to_map)
+    {
+
+        /*BENCH(explicit_bzero((void*) ((uintptr_t) cpt->comp->scratch_mem_base +*/
+                /*cpt->comp->scratch_mem_extra), cpt->comp->scratch_mem_size), "bzero");*/
+
+        struct LibDependency* lib_dep;
+        struct SegmentMap lib_dep_seg;
+        for (size_t i = 0; i < to_map->libs_count; ++i)
+        {
+            lib_dep = to_map->libs[i];
+            for (size_t j = 0; j < lib_dep->lib_segs_count; ++j)
+            {
+                lib_dep_seg = lib_dep->lib_segs[j];
+                if (lib_dep_seg.prot_flags & PROT_WRITE)
+                {
+                    void* dst = get_seg_target(cpt->map_addr, lib_dep, j);
+                    void* src = get_seg_target(cpt->comp->staged_addr, lib_dep, j);
+                    BENCH(memcpy_simple(dst, src, lib_dep_seg.file_sz), "memcpy-seg");
+                }
+            }
+        }
+
+        return cpt;
+    }
+
     size_t b_mmap = bench_init("mmap");
     bench_start(b_mmap);
     int mmap_flags = MAP_PRIVATE | MAP_ANONYMOUS;
@@ -178,17 +209,12 @@ mapping_new_fixed(struct Compartment *to_map, void *addr)
         mmap_flags |= MAP_FIXED;
     }
     // Map new compartment
-    void *map_result = cpt;
-    if (!map_result)
+    void* map_result = mmap(addr, to_map->total_size,
+        PROT_READ | PROT_WRITE | PROT_EXEC, mmap_flags, -1, 0);
+    if (map_result == MAP_FAILED)
     {
-        map_result = mmap(addr, to_map->total_size,
-            PROT_READ | PROT_WRITE | PROT_EXEC, mmap_flags, -1, 0);
-        if (map_result == MAP_FAILED)
-        {
-            err(1, "Error mapping compartment %zu data at addr %p", to_map->id,
-                addr);
-        }
-        cpt = map_result;
+        err(1, "Error mapping compartment %zu data at addr %p", to_map->id,
+            addr);
     }
     addr = map_result;
     bench_end(b_mmap);
@@ -196,6 +222,12 @@ mapping_new_fixed(struct Compartment *to_map, void *addr)
     size_t sz = to_map->data_size + to_map->page_size + to_map->environ_sz + to_map->page_size + to_map->total_tls_size;
 
     BENCH(memcpy_large(addr, to_map->staged_addr, sz), "memcpy");
+
+    struct CompMapping *new_mapping = malloc(sizeof(struct CompMapping));
+    new_mapping->id = 0; // TODO
+    new_mapping->comp = to_map;
+    new_mapping->map_addr = addr;
+    new_mapping->ddc = make_new_ddc(to_map, addr);
 
     // Set appropriate `mprotect` flags
     /*size_t b_mprot = bench_init("mprotect");*/
@@ -219,21 +251,25 @@ mapping_new_fixed(struct Compartment *to_map, void *addr)
     /*}*/
     /*bench_end(b_mprot);*/
 
+
+
     // Update `environ` pointers
     size_t b_env = bench_init("environ_map");
     bench_start(b_env);
-    void *environ_addr = (char *) to_map->environ_ptr + (uintptr_t) addr;
-    *((char **) environ_addr)
-        = (char *) environ_addr + (uintptr_t) * ((char **) environ_addr);
+    mapping_update_environ(new_mapping);
 
-    // Update the `environ` pointer with the mapping address
-    environ_addr = (char *) environ_addr + sizeof(void *);
+    /*void *environ_addr = (char *) to_map->environ_ptr + (uintptr_t) addr;*/
+    /**((char **) environ_addr)*/
+        /*= (char *) environ_addr + (uintptr_t) * ((char **) environ_addr);*/
 
-    // We update all `environ` entries
-    for (unsigned short i = 0; i < to_map->cc->env_ptr_count; ++i)
-    {
-        *((char **) environ_addr + i) += (uintptr_t) environ_addr;
-    }
+    /*// Update the `environ` pointer with the mapping address*/
+    /*environ_addr = (char *) environ_addr + sizeof(void *);*/
+
+    /*// We update all `environ` entries*/
+    /*for (unsigned short i = 0; i < to_map->cc->env_ptr_count; ++i)*/
+    /*{*/
+        /**((char **) environ_addr + i) += (uintptr_t) environ_addr;*/
+    /*}*/
     bench_end(b_env);
 
     // Perform relocations
@@ -258,11 +294,7 @@ mapping_new_fixed(struct Compartment *to_map, void *addr)
     }
     bench_end(b_rel);
 
-    struct CompMapping *new_mapping = malloc(sizeof(struct CompMapping));
-    new_mapping->id = 0; // TODO
-    new_mapping->comp = to_map;
-    new_mapping->map_addr = addr;
-    new_mapping->ddc = make_new_ddc(to_map, addr);
+    cpt = new_mapping;
 
     return new_mapping;
 }
@@ -270,7 +302,8 @@ mapping_new_fixed(struct Compartment *to_map, void *addr)
 void
 mapping_free(struct CompMapping *to_unmap)
 {
-    int res;
+    int res = 0;
+    struct CompMapping* tou = to_unmap;
 
     /*res = munmap(to_unmap->map_addr, to_unmap->comp->total_size);*/
     if (res == -1)
@@ -278,13 +311,55 @@ mapping_free(struct CompMapping *to_unmap)
         err(1, "Error unmapping compartment %zu data at addr %p", to_unmap->id,
             to_unmap->map_addr);
     }
-    free(to_unmap);
+    /*free(to_unmap);*/
 }
 
 static void *
 comp_ptr_to_mapping_addr(void *comp_ptr, void *mapping_addr)
 {
     return (char *) comp_ptr + (uintptr_t) mapping_addr;
+}
+
+static void
+mapping_update_environ(struct CompMapping* map)
+{
+    void *environ_addr = (char *) map->comp->environ_ptr + (uintptr_t) map->map_addr;
+
+    // Advance envion pointer by one slot
+    // TODO double check why
+    *((char **) environ_addr)
+        = (char *) environ_addr + (uintptr_t) * ((char **) environ_addr);
+
+    // Update the `environ` pointer with the mapping address
+    environ_addr = (char *) environ_addr + sizeof(void *);
+
+    // Update all `environ` entries
+    for (unsigned short i = 0; i < map->comp->cc->env_ptr_count; ++i)
+    {
+        *((char **) environ_addr + i) += (uintptr_t) environ_addr;
+    }
+}
+
+static void
+mapping_update_relas(struct CompMapping* map)
+{
+    struct LibRelaMapping *curr_rela_map;
+    for (size_t lib_idx = 0; lib_idx < map->comp->libs_count; ++lib_idx)
+    {
+        for (size_t rela_idx = 0;
+             rela_idx < map->comp->libs[lib_idx]->rela_maps_count; ++rela_idx)
+        {
+            curr_rela_map = &map->comp->libs[lib_idx]->rela_maps[rela_idx];
+
+            if (!curr_rela_map->mapping_reloc)
+            {
+                continue;
+            }
+            *(void **) ((char *) curr_rela_map->rela_address + (uintptr_t) map->map_addr)
+                = (char *) curr_rela_map->target_func_address
+                + (uintptr_t) map->map_addr;
+        }
+    }
 }
 
 /* Execute a mapped compartment, by jumping to the appropriate entry point.

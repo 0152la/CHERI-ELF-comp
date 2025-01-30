@@ -253,6 +253,7 @@ comp_clean(struct Compartment *to_clean)
 
         free(curr_lib_dep->lib_name);
         free(curr_lib_dep->lib_path);
+        free(curr_lib_dep->comp_syms_mem);
         free(curr_lib_dep);
     }
     struct CompEntryPointDef curr_cep;
@@ -420,8 +421,9 @@ parse_lib_file(char *lib_name, struct Compartment *new_comp)
     new_comp->libs[new_comp->libs_count - 1] = new_lib;
     if (new_lib->lib_syms)
     {
-        BENCH(update_comp_syms(
-            new_comp->comp_syms, new_lib->lib_syms, new_comp->libs_count - 1), "parsed_lib-update_syms");
+        BENCH(new_lib->comp_syms_mem = update_comp_syms(new_comp->comp_syms,
+                    new_lib->lib_syms, new_comp->libs_count - 1),
+                "parsed_lib-update_syms");
     }
 
     return new_lib;

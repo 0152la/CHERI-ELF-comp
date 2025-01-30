@@ -9,6 +9,8 @@
 #include <string.h>
 #include <math.h>
 
+//#define BENCH(func, name) func
+
 #define BENCH(func, name) \
     do { \
         size_t id = bench_init(name); \

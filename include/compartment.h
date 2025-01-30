@@ -68,7 +68,7 @@ extern void *__capability comp_return_caps[2];
 #endif
 
 // Default sizes for compartment heap and stack, if not explicitly given
-#define DEFAULT_COMP_HEAP_SZ 800 * 1024 // 800kB
+#define DEFAULT_COMP_HEAP_SZ 1600 * 1024 // 800kB
 #define DEFAULT_COMP_STACK_SZ 80 * 1024 // 80kB
 
 /* Struct representing one segment of an ELF binary.
@@ -119,6 +119,8 @@ struct LibDependency
 
     // Symbols within this library
     lib_symbol_list *lib_syms;
+    comp_symbol* comp_syms_mem;
+
 
     // Library dependencies for this library
     unsigned short lib_dep_count;

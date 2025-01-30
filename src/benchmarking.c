@@ -28,6 +28,7 @@ timespec_diff(struct timespec* end, struct timespec* start)
 size_t
 bench_init(const char* fn_name)
 {
+    return 0;
     struct bench_entry* new_be = malloc(sizeof(struct bench_entry));
     new_be->fn_name = fn_name;
     next_id += 1;
@@ -39,12 +40,14 @@ bench_init(const char* fn_name)
 void
 bench_start(size_t id)
 {
+    return;
     benchs[id]->res_start = clock_gettime(CLOCK_MONOTONIC, &benchs[id]->start);
 }
 
 void
 bench_end(size_t id)
 {
+    return;
     int res_end = clock_gettime(CLOCK_MONOTONIC, &benchs[id]->end);
     assert(benchs[id]->res_start != -1);
     assert(res_end != -1);
