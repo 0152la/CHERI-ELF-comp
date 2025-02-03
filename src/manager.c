@@ -4,6 +4,7 @@
 static size_t comps_count = 0;
 struct Compartment **comps;
 struct Compartment *loaded_comp = NULL;
+mappings_list* mappings = NULL;
 
 // Variables and functions related to laying compartments in memory
 // TODO make start address configurable
@@ -162,27 +163,40 @@ register_new_comp(char *filename, bool allow_default_entry)
 struct CompMapping *
 mapping_new(struct Compartment *to_map)
 {
+    if (!mappings)
+    {
+        mappings = mappings_init();
+    }
+
     return mapping_new_fixed(to_map, NULL);
 }
 
 struct CompMapping *
 mapping_new_fixed(struct Compartment *to_map, void *addr)
 {
-    int mmap_flags = MAP_PRIVATE | MAP_ANONYMOUS;
-    if (addr != NULL)
+    struct CompMapping* cached_mapping = mappings_search_free(to_map, mappings);
+    if (cached_mapping)
     {
-        assert((uintptr_t) addr % to_map->page_size == 0);
-        mmap_flags |= MAP_FIXED;
+        addr = cached_mapping->map_addr;
     }
-    // Map new compartment
-    void *map_result = mmap(addr, to_map->total_size,
-        PROT_READ | PROT_WRITE | PROT_EXEC, mmap_flags, -1, 0);
-    if (map_result == MAP_FAILED)
+    else
     {
-        err(1, "Error mapping compartment %zu data at addr %p", to_map->id,
-            addr);
+        int mmap_flags = MAP_PRIVATE | MAP_ANONYMOUS;
+        if (addr != NULL)
+        {
+            assert((uintptr_t) addr % to_map->page_size == 0);
+            mmap_flags |= MAP_FIXED;
+        }
+        // Map new compartment
+        void *map_result = mmap(addr, to_map->total_size,
+            PROT_READ | PROT_WRITE | PROT_EXEC, mmap_flags, -1, 0);
+        if (map_result == MAP_FAILED)
+        {
+            err(1, "Error mapping compartment %zu data at addr %p", to_map->id,
+                addr);
+        }
+        addr = map_result;
     }
-    addr = map_result;
 
     memcpy(addr, to_map->staged_addr, to_map->total_size);
 
@@ -238,18 +252,32 @@ mapping_new_fixed(struct Compartment *to_map, void *addr)
         }
     }
 
+    if (cached_mapping)
+    {
+        cached_mapping->in_use = true;
+        return cached_mapping;
+    }
+
     struct CompMapping *new_mapping = malloc(sizeof(struct CompMapping));
     new_mapping->id = 0; // TODO
     new_mapping->comp = to_map;
     new_mapping->map_addr = addr;
     new_mapping->ddc = make_new_ddc(to_map, addr);
+    new_mapping->in_use = true;
 
+    mapping_entry* new_me = malloc(sizeof(mapping_entry));
+    new_me->map_ref = new_mapping;
+    mappings_insert(new_me, mappings);
     return new_mapping;
+
 }
 
 void
 mapping_free(struct CompMapping *to_unmap)
 {
+    assert(to_unmap->in_use);
+    to_unmap->in_use = false;
+    return; // TODO
     int res;
 
     res = munmap(to_unmap->map_addr, to_unmap->comp->total_size);
@@ -258,6 +286,7 @@ mapping_free(struct CompMapping *to_unmap)
         err(1, "Error unmapping compartment %zu data at addr %p", to_unmap->id,
             to_unmap->map_addr);
     }
+    mappings_delete(to_unmap, mappings);
     free(to_unmap);
 }
 

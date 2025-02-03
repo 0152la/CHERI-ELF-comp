@@ -3,6 +3,7 @@ add_library(chcomp STATIC
     compartment.c
     intercept.c
     manager.c
+    mappings.c
     symbols_comp.c
     symbols_lib.c
     transition.S

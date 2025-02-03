@@ -85,6 +85,7 @@ cheri_offset_set(void *ptr, intptr_t addr)
 }
 
 #include "../src/compartment.c"
+#include "../src/mappings.c"
 #include "../src/manager.c"
 
 extern char **environ;
