@@ -72,7 +72,7 @@ mappings_search_free(struct Compartment* to_search, mappings_list* list)
             mapping_hash(to_search->id));
     while (search_bucket)
     {
-        struct CompMapping* cm = search_bucket->data;
+        struct CompMapping* cm = ((mapping_entry*) search_bucket->data)->map_ref;
         if (cm->comp == to_search && !cm->in_use)
         {
             return cm;

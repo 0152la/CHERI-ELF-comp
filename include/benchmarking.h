@@ -11,7 +11,7 @@
 
 //#define BENCH(func, name) func
 
-#define BENCH(func, name) \
+#define BENCH(name, func) \
     do { \
         size_t id = bench_init(name); \
         bench_start(id); \

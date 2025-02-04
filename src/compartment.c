@@ -216,7 +216,6 @@ comp_from_elf(char *filename, struct CompConfig *cc)
     assert(new_comp->environ_sz + new_comp->total_tls_size
         == new_comp->scratch_mem_extra);
 
-    print_comp_simple(new_comp);
     return new_comp;
 }
 

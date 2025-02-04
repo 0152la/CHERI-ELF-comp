@@ -17,6 +17,7 @@
 #include "compartment.h"
 #include "intercept.h"
 #include "mappings.h"
+#include "benchmarking.h"
 
 #define align_down(x, align) __builtin_align_down(x, align)
 #define align_up(x, align) __builtin_align_up(x, align)

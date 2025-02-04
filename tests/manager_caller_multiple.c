@@ -1,8 +1,12 @@
 #include "manager.h"
+#include "benchmarking.h"
 
 int
 main(int argc, char **argv)
 {
+    size_t b_all = bench_init("all");
+    bench_start(b_all);
+
     const char *count_env_name = "EXECUTE_COUNT";
     const char *count_env_val = getenv(count_env_name);
     const unsigned int comps_count_default = 100;
@@ -28,5 +32,6 @@ main(int argc, char **argv)
     }
     comp_clean(hw_comp);
     assert(!comp_result);
+    bench_end(b_all);
     return comp_result;
 }

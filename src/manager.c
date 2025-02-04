@@ -57,6 +57,8 @@ prepare_compartment_environ();
 static void *
 prepare_compartment_args(char **args, struct CompEntryPointDef);
 
+static void
+mapping_reuse(struct CompMapping*);
 static void *
 comp_ptr_to_mapping_addr(void *, void *);
 
@@ -174,10 +176,14 @@ mapping_new(struct Compartment *to_map)
 struct CompMapping *
 mapping_new_fixed(struct Compartment *to_map, void *addr)
 {
-    struct CompMapping* cached_mapping = mappings_search_free(to_map, mappings);
+    struct CompMapping* cached_mapping;
+    /*BENCH("search", cached_mapping = mappings_search_free(to_map, mappings));*/
+    cached_mapping = mappings_search_free(to_map, mappings);
     if (cached_mapping)
     {
-        addr = cached_mapping->map_addr;
+        BENCH("reuse", mapping_reuse(cached_mapping));
+        /*mapping_reuse(cached_mapping);*/
+        return cached_mapping;
     }
     else
     {
@@ -198,26 +204,26 @@ mapping_new_fixed(struct Compartment *to_map, void *addr)
         addr = map_result;
     }
 
-    memcpy(addr, to_map->staged_addr, to_map->total_size);
+    memcpy(addr, to_map->staged_addr, to_map->data_size + to_map->scratch_mem_extra);
 
     // Set appropriate `mprotect` flags
-    struct LibDependency *lib_dep;
-    struct SegmentMap lib_dep_seg;
-    for (size_t i = 0; i < to_map->libs_count; ++i)
-    {
-        lib_dep = to_map->libs[i];
-        for (size_t j = 0; j < lib_dep->lib_segs_count; ++j)
-        {
-            lib_dep_seg = lib_dep->lib_segs[j];
-            if (mprotect(get_seg_target(addr, lib_dep, j), lib_dep_seg.mem_sz,
-                    lib_dep_seg.prot_flags)
-                != 0)
-            {
-                err(1, "Error setting permissions for %p (lib %zu seg %zu)",
-                    get_seg_target(addr, lib_dep, j), i, j);
-            }
-        }
-    }
+    /*struct LibDependency *lib_dep;*/
+    /*struct SegmentMap lib_dep_seg;*/
+    /*for (size_t i = 0; i < to_map->libs_count; ++i)*/
+    /*{*/
+        /*lib_dep = to_map->libs[i];*/
+        /*for (size_t j = 0; j < lib_dep->lib_segs_count; ++j)*/
+        /*{*/
+            /*lib_dep_seg = lib_dep->lib_segs[j];*/
+            /*if (mprotect(get_seg_target(addr, lib_dep, j), lib_dep_seg.mem_sz,*/
+                    /*lib_dep_seg.prot_flags)*/
+                /*!= 0)*/
+            /*{*/
+                /*err(1, "Error setting permissions for %p (lib %zu seg %zu)",*/
+                    /*get_seg_target(addr, lib_dep, j), i, j);*/
+            /*}*/
+        /*}*/
+    /*}*/
 
     // Update `environ` pointers
     void *environ_addr = (char *) to_map->environ_ptr + (uintptr_t) addr;
@@ -288,6 +294,77 @@ mapping_free(struct CompMapping *to_unmap)
     }
     mappings_delete(to_unmap, mappings);
     free(to_unmap);
+}
+
+/* Reuse a previously mapped and used compartment mapping, which we cached, and
+ * is currently unused. We need to do some reinitialisation (writable segments,
+ * scratch memory), but we preclude the need of more memory mapping / unmapping
+ * operations, which seem expensive.
+ */
+static void
+mapping_reuse(struct CompMapping* to_reuse)
+{
+    void* addr = to_reuse->map_addr;
+
+    // Copy over write-permission segments
+    struct LibDependency *lib_dep;
+    struct SegmentMap lib_dep_seg;
+    char* lib_dep_seg_off;
+    for (size_t i = 0; i < to_reuse->comp->libs_count; ++i)
+    {
+        lib_dep = to_reuse->comp->libs[i];
+        for (size_t j = 0; j < lib_dep->lib_segs_count; ++j)
+        {
+            lib_dep_seg = lib_dep->lib_segs[j];
+            if (lib_dep_seg.prot_flags & PROT_WRITE)
+            {
+                lib_dep_seg_off = (char*) lib_dep->lib_mem_base + (uintptr_t) lib_dep_seg.mem_bot;
+                memcpy(comp_ptr_to_mapping_addr(lib_dep_seg_off, addr),
+                        comp_ptr_to_mapping_addr(lib_dep_seg_off,
+                            to_reuse->comp->staged_addr), lib_dep_seg.mem_sz);
+            }
+        }
+    }
+
+    // Copy over extra scratch memory
+    memcpy(comp_ptr_to_mapping_addr(to_reuse->comp->scratch_mem_base, addr),
+           comp_ptr_to_mapping_addr(to_reuse->comp->scratch_mem_base, to_reuse->comp->staged_addr),
+           to_reuse->comp->scratch_mem_extra);
+
+    // Update `environ` pointers
+    void *environ_addr = (char *) to_reuse->comp->environ_ptr + (uintptr_t) addr;
+    *((char **) environ_addr)
+        = (char *) environ_addr + (uintptr_t) * ((char **) environ_addr);
+
+    // Update the `environ` pointer with the mapping address
+    environ_addr = (char *) environ_addr + sizeof(void *);
+
+    // We update all `environ` entries
+    for (unsigned short i = 0; i < to_reuse->comp->cc->env_ptr_count; ++i)
+    {
+        *((char **) environ_addr + i) += (uintptr_t) environ_addr;
+    }
+
+    // Perform relocations
+    struct LibRelaMapping *curr_rela_map;
+    for (size_t lib_idx = 0; lib_idx < to_reuse->comp->libs_count; ++lib_idx)
+    {
+        for (size_t rela_idx = 0;
+             rela_idx < to_reuse->comp->libs[lib_idx]->rela_maps_count; ++rela_idx)
+        {
+            curr_rela_map = &to_reuse->comp->libs[lib_idx]->rela_maps[rela_idx];
+
+            if (!curr_rela_map->mapping_reloc)
+            {
+                continue;
+            }
+            *(void **) ((char *) curr_rela_map->rela_address + (uintptr_t) addr)
+                = (char *) curr_rela_map->target_func_address
+                + (uintptr_t) addr;
+        }
+    }
+
+    to_reuse->in_use = true;
 }
 
 static void *

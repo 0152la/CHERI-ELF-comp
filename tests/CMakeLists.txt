@@ -72,7 +72,7 @@ endfunction()
 function(new_func_test test_name)
     add_executable(${test_name}
         ${test_name}.c)
-    target_link_libraries(${test_name} PRIVATE chcomp)
+    target_link_libraries(${test_name} PRIVATE ${BIN_LINK_LIBS})
     target_include_directories(${test_name} PRIVATE
         ${CMAKE_SOURCE_DIR}/src ${BIN_INCLUDE_DIRS})
 endfunction()
