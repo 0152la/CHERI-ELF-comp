@@ -1,23 +1,24 @@
 set(BIN_INCLUDE_DIRS ${INCLUDE_DIR} ${TOML_INCLUDE_DIR} ${TOMMYDS_DIR})
+set(BIN_LINK_LIBS chcomp compbench)
 
 # Manager executables
 add_executable(manager_call
     ${TEST_DIR}/manager_caller.c
     )
 target_include_directories(manager_call PUBLIC ${BIN_INCLUDE_DIRS})
-target_link_libraries(manager_call PUBLIC chcomp)
+target_link_libraries(manager_call PUBLIC ${BIN_LINK_LIBS})
 
 add_executable(manager_call_multi
     ${TEST_DIR}/manager_caller_multiple.c
     )
 target_include_directories(manager_call_multi PUBLIC ${BIN_INCLUDE_DIRS})
-target_link_libraries(manager_call_multi PUBLIC chcomp)
+target_link_libraries(manager_call_multi PUBLIC ${BIN_LINK_LIBS})
 
 add_executable(manager_args
     ${TEST_DIR}/manager_arg_passer.c
     )
 target_include_directories(manager_args PUBLIC ${BIN_INCLUDE_DIRS})
-target_link_libraries(manager_args PUBLIC chcomp)
+target_link_libraries(manager_args PUBLIC ${BIN_LINK_LIBS})
 
 # Special tests
 add_executable(comp_harness EXCLUDE_FROM_ALL
