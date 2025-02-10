@@ -207,6 +207,8 @@ struct Compartment
     void *scratch_mem_stack_top;
     size_t scratch_mem_stack_size;
 
+    void* heap_mem_header;
+
     // Internal libraries and relocations
     size_t libs_count;
     struct LibDependency **libs;

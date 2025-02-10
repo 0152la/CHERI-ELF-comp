@@ -59,6 +59,8 @@ prepare_compartment_args(char **args, struct CompEntryPointDef);
 
 static void
 mapping_reuse(struct CompMapping*);
+static void
+destroy_heap_allocations(void*);
 static void *
 comp_ptr_to_mapping_addr(void *, void *);
 
@@ -258,6 +260,14 @@ mapping_new_fixed(struct Compartment *to_map, void *addr)
         }
     }
 
+    // Update `heap_mem_header` address, if we saved it; we need to do this, as
+    // it is a static variable, thus it's address is not relocated, but taken
+    // as an offset from the program counter (TODO check)
+    if (to_map->heap_mem_header)
+    {
+        to_map->heap_mem_header = (char*) to_map->heap_mem_header + (uintptr_t) addr;
+    }
+
     if (cached_mapping)
     {
         cached_mapping->in_use = true;
@@ -307,6 +317,8 @@ mapping_reuse(struct CompMapping* to_reuse)
     void* addr = to_reuse->map_addr;
 
     // Copy over write-permission segments
+    size_t b_segs = bench_init("reuse-segs");
+    bench_start(b_segs);
     struct LibDependency *lib_dep;
     struct SegmentMap lib_dep_seg;
     char* lib_dep_seg_off;
@@ -319,19 +331,46 @@ mapping_reuse(struct CompMapping* to_reuse)
             if (lib_dep_seg.prot_flags & PROT_WRITE)
             {
                 lib_dep_seg_off = (char*) lib_dep->lib_mem_base + (uintptr_t) lib_dep_seg.mem_bot;
-                memcpy(comp_ptr_to_mapping_addr(lib_dep_seg_off, addr),
+                printf(" -- LIB %s SEG %zu SZ %zu\n", lib_dep->lib_name, j, lib_dep_seg.mem_sz);
+                BENCH("reuse-segs-memcpy", memcpy(comp_ptr_to_mapping_addr(lib_dep_seg_off, addr),
                         comp_ptr_to_mapping_addr(lib_dep_seg_off,
-                            to_reuse->comp->staged_addr), lib_dep_seg.mem_sz);
+                            to_reuse->comp->staged_addr), lib_dep_seg.file_sz));
             }
         }
     }
+    bench_end(b_segs);
 
     // Copy over extra scratch memory
+    size_t b_scratch = bench_init("reuse-scratch");
+    bench_start(b_scratch);
     memcpy(comp_ptr_to_mapping_addr(to_reuse->comp->scratch_mem_base, addr),
            comp_ptr_to_mapping_addr(to_reuse->comp->scratch_mem_base, to_reuse->comp->staged_addr),
            to_reuse->comp->scratch_mem_extra);
+    bench_end(b_scratch);
+
+    // Zero out heap allocations
+    /*if (to_reuse->comp->heap_mem_header)*/
+    /*{*/
+        /*destroy_heap_allocations(to_reuse->comp->heap_mem_header);*/
+    /*}*/
+
+    // Zero out stack
+    /*bzero(comp_ptr_to_mapping_addr((char*) to_reuse->comp->scratch_mem_base +*/
+                /*to_reuse->comp->scratch_mem_extra, addr),*/
+            /*to_reuse->comp->scratch_mem_stack_size);*/
+
+
+    // Zero out remaining scratch memory
+    BENCH("reuse-bzero",
+    bzero(comp_ptr_to_mapping_addr((char*)
+                to_reuse->comp->scratch_mem_base +
+                to_reuse->comp->scratch_mem_extra, addr),
+            to_reuse->comp->scratch_mem_size - to_reuse->comp->scratch_mem_extra) //;
+    );
 
     // Update `environ` pointers
+    size_t b_environ = bench_init("reuse-environ");
+    bench_start(b_environ);
     void *environ_addr = (char *) to_reuse->comp->environ_ptr + (uintptr_t) addr;
     *((char **) environ_addr)
         = (char *) environ_addr + (uintptr_t) * ((char **) environ_addr);
@@ -344,8 +383,11 @@ mapping_reuse(struct CompMapping* to_reuse)
     {
         *((char **) environ_addr + i) += (uintptr_t) environ_addr;
     }
+    bench_end(b_environ);
 
     // Perform relocations
+    size_t b_relas = bench_init("reuse-relas");
+    bench_start(b_relas);
     struct LibRelaMapping *curr_rela_map;
     for (size_t lib_idx = 0; lib_idx < to_reuse->comp->libs_count; ++lib_idx)
     {
@@ -363,8 +405,27 @@ mapping_reuse(struct CompMapping* to_reuse)
                 + (uintptr_t) addr;
         }
     }
+    bench_end(b_relas);
 
     to_reuse->in_use = true;
+}
+
+static void
+destroy_heap_allocations(void* addr)
+{
+    const size_t block_metadata_sz = sizeof(void*) + sizeof(size_t);
+
+    void* curr_block = *(void**) addr;
+    void* prev_block;
+    size_t block_sz;
+    while(curr_block)
+    {
+        block_sz = *(size_t *) ((char *) curr_block - block_metadata_sz);
+        explicit_bzero(curr_block, block_sz);
+        prev_block = curr_block;
+        curr_block = *(void **) ((char *) curr_block - sizeof(void *));
+        explicit_bzero((char*) addr - block_metadata_sz, block_metadata_sz);
+    }
 }
 
 static void *

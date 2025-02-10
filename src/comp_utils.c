@@ -53,6 +53,12 @@ make_new_metadata(void *addr, size_t size, void *next, void *prev)
 }
 
 static inline void
+destroy_metadata(void* addr)
+{
+    explicit_bzero((char*) addr - block_metadata_sz, block_metadata_sz);
+}
+
+static inline void
 clear_block(void *addr)
 {
     memset((char *) addr - block_metadata_sz, 0, get_size(addr));
@@ -175,7 +181,9 @@ free(void *to_free)
 void *
 calloc(size_t elem_count, size_t elem_size)
 {
-    return malloc(elem_count * elem_size);
+    void* alloc = malloc(elem_count * elem_size);
+    explicit_bzero(alloc, elem_count * elem_size);
+    return alloc;
 }
 
 void *

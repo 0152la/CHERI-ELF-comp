@@ -2,6 +2,7 @@
 
 const char *libs_path_env_var = "COMP_LIBRARY_PATH";
 const char *tls_rtld_dropin = "tls_lookup_stub";
+const char* comp_malloc_header = "heap_header";
 const char *comp_utils_soname = "libcomputils.so";
 
 /*******************************************************************************
@@ -94,6 +95,8 @@ comp_init()
     new_comp->scratch_mem_stack_size = 0;
     new_comp->scratch_mem_extra = 0;
 
+    new_comp->heap_mem_header = NULL;
+
     new_comp->libs_count = 0;
     new_comp->libs = NULL;
     new_comp->libs_tls_sects = NULL;
@@ -171,6 +174,15 @@ comp_from_elf(char *filename, struct CompConfig *cc)
         next_dep:
             (void) 0;
         }
+
+        if (!strcmp(parsed_lib->lib_name, comp_utils_soname))
+        {
+            new_comp->heap_mem_header = (char*)
+                lib_syms_search(comp_malloc_header,
+                        parsed_lib->lib_syms)->sym_offset + (uintptr_t)
+                parsed_lib->lib_mem_base;
+        }
+
         libs_parsed_count += 1;
     }
     free(libs_to_parse);
