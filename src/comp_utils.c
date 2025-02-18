@@ -53,12 +53,6 @@ make_new_metadata(void *addr, size_t size, void *next, void *prev)
 }
 
 static inline void
-destroy_metadata(void* addr)
-{
-    explicit_bzero((char*) addr - block_metadata_sz, block_metadata_sz);
-}
-
-static inline void
 clear_block(void *addr)
 {
     memset((char *) addr - block_metadata_sz, 0, get_size(addr));
@@ -81,7 +75,8 @@ malloc(size_t to_alloc)
                 MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
             if (mem_begin == MAP_FAILED)
             {
-                err(1, "comp_utils: Failed `mmap`");
+                exit(1);
+                /*err(1, "comp_utils: Failed `mmap`"); // TODO replace with a signal*/
             }
             mem_left = NON_COMP_DEFAULT_SIZE;
         }

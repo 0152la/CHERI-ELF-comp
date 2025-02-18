@@ -67,8 +67,6 @@ static void
 print_lib_dep_seg(struct SegmentMap *);
 static void
 print_lib_dep(struct LibDependency *);
-static void
-print_comp_simple(struct Compartment *);
 
 /*******************************************************************************
  * Main compartment functions
@@ -1242,7 +1240,7 @@ print_lib_dep(struct LibDependency *lib_dep)
     printf("== DONE\n");
 }
 
-static void
+void
 print_comp_simple(struct Compartment *to_print)
 {
     printf("== COMPARTMENT SIMPLE -- ID %zu\n", to_print->id);

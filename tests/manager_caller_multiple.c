@@ -1,5 +1,6 @@
 #include "manager.h"
 #include "benchmarking.h"
+#include <stdio.h>
 
 int
 main(int argc, char **argv)

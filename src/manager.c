@@ -275,7 +275,7 @@ mapping_new_fixed(struct Compartment *to_map, void *addr)
     }
 
     struct CompMapping *new_mapping = malloc(sizeof(struct CompMapping));
-    new_mapping->id = 0; // TODO
+    new_mapping->id = 0; // TODO handle multiple compartments
     new_mapping->comp = to_map;
     new_mapping->map_addr = addr;
     new_mapping->ddc = make_new_ddc(to_map, addr);
@@ -293,7 +293,10 @@ mapping_free(struct CompMapping *to_unmap)
 {
     assert(to_unmap->in_use);
     to_unmap->in_use = false;
-    return; // TODO
+    return; // TODO this should properly cache a single, final compartment
+            // instance, and would ideally require cleanup at a future time,
+            // especially when multiple `Compartment` instances are available
+
     int res;
 
     res = munmap(to_unmap->map_addr, to_unmap->comp->total_size);
@@ -331,7 +334,6 @@ mapping_reuse(struct CompMapping* to_reuse)
             if (lib_dep_seg.prot_flags & PROT_WRITE)
             {
                 lib_dep_seg_off = (char*) lib_dep->lib_mem_base + (uintptr_t) lib_dep_seg.mem_bot;
-                printf(" -- LIB %s SEG %zu SZ %zu\n", lib_dep->lib_name, j, lib_dep_seg.mem_sz);
                 BENCH("reuse-segs-memcpy", memcpy(comp_ptr_to_mapping_addr(lib_dep_seg_off, addr),
                         comp_ptr_to_mapping_addr(lib_dep_seg_off,
                             to_reuse->comp->staged_addr), lib_dep_seg.file_sz));
@@ -349,24 +351,17 @@ mapping_reuse(struct CompMapping* to_reuse)
     bench_end(b_scratch);
 
     // Zero out heap allocations
-    /*if (to_reuse->comp->heap_mem_header)*/
-    /*{*/
-        /*destroy_heap_allocations(to_reuse->comp->heap_mem_header);*/
-    /*}*/
+    // XXX this doesn't clear the whole heap, so any out-of-bounds writes
+    // inside the compartment can leak information to future compartments
+    if (to_reuse->comp->heap_mem_header)
+    {
+        destroy_heap_allocations(to_reuse->comp->heap_mem_header);
+    }
 
     // Zero out stack
-    /*bzero(comp_ptr_to_mapping_addr((char*) to_reuse->comp->scratch_mem_base +*/
-                /*to_reuse->comp->scratch_mem_extra, addr),*/
-            /*to_reuse->comp->scratch_mem_stack_size);*/
-
-
-    // Zero out remaining scratch memory
-    BENCH("reuse-bzero",
-    bzero(comp_ptr_to_mapping_addr((char*)
-                to_reuse->comp->scratch_mem_base +
+    bzero(comp_ptr_to_mapping_addr((char*) to_reuse->comp->scratch_mem_base +
                 to_reuse->comp->scratch_mem_extra, addr),
-            to_reuse->comp->scratch_mem_size - to_reuse->comp->scratch_mem_extra) //;
-    );
+            to_reuse->comp->scratch_mem_stack_size);
 
     // Update `environ` pointers
     size_t b_environ = bench_init("reuse-environ");
@@ -410,21 +405,24 @@ mapping_reuse(struct CompMapping* to_reuse)
     to_reuse->in_use = true;
 }
 
+/* Takes a pointer to the address to the `heap_header`, as used in
+ * `comp_utils.c`, and iteratively deletes all allocations saved. We delete
+ * the allocation and the metadata in one single `bzero`.
+ */
 static void
-destroy_heap_allocations(void* addr)
+destroy_heap_allocations(void* heap_header)
 {
     const size_t block_metadata_sz = sizeof(void*) + sizeof(size_t);
 
-    void* curr_block = *(void**) addr;
+    void* curr_block = *(void**) heap_header;
     void* prev_block;
     size_t block_sz;
     while(curr_block)
     {
         block_sz = *(size_t *) ((char *) curr_block - block_metadata_sz);
-        explicit_bzero(curr_block, block_sz);
         prev_block = curr_block;
         curr_block = *(void **) ((char *) curr_block - sizeof(void *));
-        explicit_bzero((char*) addr - block_metadata_sz, block_metadata_sz);
+        explicit_bzero((char*) prev_block - block_metadata_sz, block_metadata_sz + block_sz);
     }
 }
 

@@ -241,4 +241,7 @@ get_seg_target(void *, struct LibDependency *, size_t);
 struct Compartment *
 find_comp(struct Compartment *);
 
+void
+print_comp_simple(struct Compartment *);
+
 #endif // _COMPARTMENT_H
