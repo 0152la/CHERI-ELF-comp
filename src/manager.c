@@ -179,12 +179,10 @@ struct CompMapping *
 mapping_new_fixed(struct Compartment *to_map, void *addr)
 {
     struct CompMapping* cached_mapping;
-    /*BENCH("search", cached_mapping = mappings_search_free(to_map, mappings));*/
     cached_mapping = mappings_search_free(to_map, mappings);
     if (cached_mapping)
     {
-        BENCH("reuse", mapping_reuse(cached_mapping));
-        /*mapping_reuse(cached_mapping);*/
+        mapping_reuse(cached_mapping);
         return cached_mapping;
     }
     else
@@ -334,9 +332,9 @@ mapping_reuse(struct CompMapping* to_reuse)
             if (lib_dep_seg.prot_flags & PROT_WRITE)
             {
                 lib_dep_seg_off = (char*) lib_dep->lib_mem_base + (uintptr_t) lib_dep_seg.mem_bot;
-                BENCH("reuse-segs-memcpy", memcpy(comp_ptr_to_mapping_addr(lib_dep_seg_off, addr),
+                memcpy(comp_ptr_to_mapping_addr(lib_dep_seg_off, addr),
                         comp_ptr_to_mapping_addr(lib_dep_seg_off,
-                            to_reuse->comp->staged_addr), lib_dep_seg.file_sz));
+                            to_reuse->comp->staged_addr), lib_dep_seg.file_sz);
             }
         }
     }
