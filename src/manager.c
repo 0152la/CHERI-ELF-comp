@@ -568,7 +568,11 @@ parse_compartment_config_file(char *comp_filename, bool allow_default)
     free(config_filename);
     if (!config_fd)
     {
-        assert(allow_default);
+        if (!allow_default)
+        {
+            errx(1, "Did not find config file `%s` and default config
+                    disallowed", comp_filename);
+        }
         errno = 0;
         return make_default_comp_config();
     }
@@ -656,7 +660,6 @@ prepare_compartment_environ()
 {
     proc_env_ptr = malloc(max_env_sz);
     memset(proc_env_ptr, 0, max_env_sz);
-    /*char **proc_env_vals = proc_env_ptr + max_env_count * sizeof(char *);*/
 
     const uintptr_t vals_offset = max_env_count * sizeof(char *);
     for (char **curr_env = environ; *curr_env; curr_env++)
