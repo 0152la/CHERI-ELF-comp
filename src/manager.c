@@ -77,6 +77,17 @@ print_comp(struct Compartment *);
 static void
 print_mapping_simple(struct CompMapping *);
 
+static void
+dump_code(struct CompMapping*, int);
+static void
+dump_memory(struct CompMapping*, int);
+static void
+dump_stack_and_heap(struct CompMapping*, int);
+static void
+dump_mapping(struct CompMapping*, int);
+static void
+dump_mapping_default(struct CompMapping*);
+
 /*******************************************************************************
  * Utility functions
  ******************************************************************************/
@@ -332,9 +343,14 @@ mapping_reuse(struct CompMapping* to_reuse)
             if (lib_dep_seg.prot_flags & PROT_WRITE)
             {
                 lib_dep_seg_off = (char*) lib_dep->lib_mem_base + (uintptr_t) lib_dep_seg.mem_bot;
+                printf("LIB %zu -- SEG %zu -- LIB_OFF %#p -- FROM %#p -- OFF %#p -- SZ %zu (%#lx) \n", i, j,
+                        lib_dep_seg.mem_bot,
+                        comp_ptr_to_mapping_addr(lib_dep_seg_off, addr),
+                        (void*) lib_dep_seg_off, lib_dep_seg.mem_sz,
+                        lib_dep_seg.mem_sz);
                 memcpy(comp_ptr_to_mapping_addr(lib_dep_seg_off, addr),
                         comp_ptr_to_mapping_addr(lib_dep_seg_off,
-                            to_reuse->comp->staged_addr), lib_dep_seg.file_sz);
+                            to_reuse->comp->staged_addr), lib_dep_seg.mem_sz);
             }
         }
     }
@@ -460,6 +476,24 @@ mapping_exec(struct CompMapping *to_exec, char *fn_name, char **fn_args_arr)
         errx(1, "Did not find entry point `%s`!\n", fn_name);
     }
 
+    static int fi = 0;
+    /*const static int lim = 3;*/
+    printf("EXEC %d\n", fi);
+    /*char* fname = malloc(sizeof("./logs/tmpi-00.log"));*/
+    /*sprintf(fname, "./logs/tmpi-%02d.log", fi);*/
+
+    /*int fd;*/
+    /*if (fi == 0 || fi >= lim - 2)*/
+    /*{*/
+        /*fd = open(fname, O_WRONLY);*/
+        /*if (fd == -1)*/
+        /*{*/
+            /*err(1, "Error dump %s", fname);*/
+        /*}*/
+        /*dump_code(to_exec, fd);*/
+        /*close(fd);*/
+    /*}*/
+
     void *fn_args = prepare_compartment_args(fn_args_arr, comp_entry);
     assert(comp_entry.arg_count <= 3); // TODO currently hard limited by
                                        // number of registers in
@@ -472,6 +506,20 @@ mapping_exec(struct CompMapping *to_exec, char *fn_name, char **fn_args_arr)
         = comp_exec_in(comp_sp, to_exec->ddc, fn, fn_args, comp_entry.arg_count,
             sealed_redirect_cap, (char *) comp_tls_region_start);
     free(fn_args);
+
+    /*if (fi == 0 || fi >= lim - 2)*/
+    /*{*/
+        /*sprintf(fname, "./logs/tmpf-%02d.log", fi);*/
+        /*fd = open(fname, O_WRONLY);*/
+        /*if (fd == -1)*/
+        /*{*/
+            /*err(1, "Error dump %s", fname);*/
+        /*}*/
+        /*dump_code(to_exec, fd);*/
+        /*close(fd);*/
+    /*}*/
+    fi += 1;
+
     return result;
 }
 
@@ -570,8 +618,8 @@ parse_compartment_config_file(char *comp_filename, bool allow_default)
     {
         if (!allow_default)
         {
-            errx(1, "Did not find config file `%s` and default config
-                    disallowed", comp_filename);
+            errx(1, "Did not find config file `%s` and default config "
+                    "disallowed", comp_filename);
         }
         errno = 0;
         return make_default_comp_config();
@@ -743,6 +791,10 @@ make_default_comp_config()
     return cc;
 }
 
+/*******************************************************************************
+ * Print functions
+ ******************************************************************************/
+
 static void
 print_comp(struct Compartment *to_print)
 {
@@ -797,4 +849,47 @@ print_mapping_simple(struct CompMapping *to_print)
             (void *) ((char *) to_print->comp->libs[i]->lib_mem_base
                 + (uintptr_t) to_print->map_addr));
     }
+}
+
+static void
+dump_memory(struct CompMapping *to_dump, int fd)
+{
+    write(fd, comp_ptr_to_mapping_addr(to_dump->comp->scratch_mem_base,
+                to_dump->map_addr), to_dump->comp->scratch_mem_size);
+}
+
+static void
+dump_code(struct CompMapping *to_dump, int fd)
+{
+    write(fd, to_dump->map_addr, to_dump->comp->data_size);
+}
+
+static void
+dump_stack_and_heap(struct CompMapping* to_dump, int fd)
+{
+    write(fd, comp_ptr_to_mapping_addr((char*) to_dump->comp->scratch_mem_base
+                + (uintptr_t) to_dump->comp->scratch_mem_extra, to_dump->map_addr),
+            to_dump->comp->scratch_mem_size -
+            to_dump->comp->scratch_mem_extra);
+}
+
+static void
+dump_mapping(struct CompMapping* to_dump, int fd)
+{
+    dprintf(fd, "== MAPPING DUMP -- ID %zu -- MAIN PATH %s\n", to_dump->id,
+            to_dump->comp->libs[0]->lib_path);
+    dump_code(to_dump, fd);
+    dump_memory(to_dump, fd);
+}
+
+static void
+dump_mapping_default(struct CompMapping* to_dump)
+{
+    int fd = open(dump_file, O_WRONLY | O_TRUNC | O_APPEND);
+    if (fd == -1)
+    {
+        err(1, "Error dumping mapping %zu", to_dump->id);
+    }
+    dump_mapping(to_dump, fd);
+    close(fd);
 }
